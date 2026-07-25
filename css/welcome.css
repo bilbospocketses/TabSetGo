@@ -37,7 +37,9 @@ p.answer {
 #left_indicator {
   top:35%;
   left:0;
-  background:url(../images/left.png) center no-repeat;
+  background-color: var(--text-muted);
+  -webkit-mask: url(../images/chevron-left.svg) no-repeat center / 44px 44px;
+  mask: url(../images/chevron-left.svg) no-repeat center / 44px 44px;
   height:72px;
   width:72px;
   opacity:0.7;
@@ -70,7 +72,9 @@ li.list-nav.selected span{
 #right_indicator {
   top:35%;
   right:0;
-  background:url(../images/right.png) center no-repeat;
+  background-color: var(--text-muted);
+  -webkit-mask: url(../images/chevron-right.svg) no-repeat center / 44px 44px;
+  mask: url(../images/chevron-right.svg) no-repeat center / 44px 44px;
   height:72px;
   width:72px;
   opacity:0.7;
@@ -149,30 +153,27 @@ p.blah { }
 }
 
 #intro_screenshot.default {
-    background: url(../images/screenshots/NewTabRedirect-options.png) top left no-repeat content-box;
+    background: url(../images/screenshots/tabsetgo-options.png) top left no-repeat content-box;
 }
 
 #intro_screenshot.ss-url {
-    background: url(../images/screenshots/NewTabRedirect-options.url.png) top left no-repeat content-box;
+    background: url(../images/screenshots/tabsetgo-options.url.png) top left no-repeat content-box;
 }
 
 #intro_screenshot.ss-save {
-    background: url(../images/screenshots/NewTabRedirect-options.save.png) top left no-repeat content-box;
-    background-position: -150px 0;
+    background: url(../images/screenshots/tabsetgo-options.save.png) top left no-repeat content-box;
 }
 
 #intro_screenshot.ss-sync {
-    background: url(../images/screenshots/NewTabRedirect-options.sync.png) top left no-repeat content-box;
+    background: url(../images/screenshots/tabsetgo-options.sync.png) top left no-repeat content-box;
 }
 
 #intro_screenshot.ss-saved {
-    background: url(../images/screenshots/NewTabRedirect-options.saved.png) top left no-repeat content-box;
-    background-position: -280px 0;
+    background: url(../images/screenshots/tabsetgo-options.saved.png) top left no-repeat content-box;
 }
 
 #intro_screenshot.ss-quick {
-    background: url(../images/screenshots/NewTabRedirect-options.quick.png) top left no-repeat content-box;
-    background-position: 0 -100px;
+    background: url(../images/screenshots/tabsetgo-options.quick.png) top left no-repeat content-box;
 }
 
 ul#normal_ss:before {
@@ -202,9 +203,7 @@ span.intro_explain {
 
 a.settings-link {
     display:inline-block;
-    color:rgba(0,0,0,0);
-    height:29px;
-    width:28px;
-    background: url(../images/screenshots/Chrome-Settings.png) no-repeat top center;
-    background-size: 75% auto;
+    color: var(--text);
+    font-size: 1.2em;
+    text-decoration: none;
 }

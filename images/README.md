@@ -1,13 +1,11 @@
 # License
 
-icon19.png, icon36.png, icon128.png, icon200.png are original TabSetGo artwork,
-released under the project's MIT license.
+All icons (`icon19/36/128/200.png`), the chevrons, `document-new.svg`, and the
+`screenshots/` previews are original TabSetGo artwork or captures, released
+under the project's MIT license. Icons are rebuilt by `scripts/make-icons.ps1`;
+screenshots by `scripts/intro-shots.mjs`.
 
-apps.png, left.png, right.png were created with Android Asset Studio 
-and are licensed under the [Creative Commons Attribution 3.0 Unported License](http://creativecommons.org/licenses/by/3.0/), 
-which differs from the [MIT License](https://opensource.org/license/mit) of TabSetGo itself.
-
-All \*\_32.png images are from [intridea](https://github.com/intridea/authbuttons).
-
-All logos are copyright and trademark their respective companies and are provided here only for means of usage with direct linkage to the respective service.
-
+`github-mark.svg` is the GitHub mark from
+[Primer Octicons](https://github.com/primer/octicons) (MIT), used to link to
+the project's GitHub repository. GitHub and its logo are trademarks of GitHub,
+Inc.
