@@ -44,8 +44,8 @@ async function saveInitial() {
     options["showWelcome"] = true;
 
     if (!options.url) {
-        log("Using default New Tab Redirect page");
-        // this defaults to the New Tab Redirect Apps page
+        log("Using default apps page");
+        // an empty url selects the built-in apps page
         options.url = "";
     }
 
@@ -113,13 +113,6 @@ chrome.runtime.onInstalled.addListener(function (details) {
 
                 // be sure to save when we last installed (or updated)
                 save({ "lastInstall": +new Date() }, "sync");
-
-                // only display the upgrade message once, and only for true upgrades
-                if((manifest.version === "3.1" || manifest.version === "3.1.1" ) && details.reason === "update" && !localQuery["upgrade_3.1"]) {
-                    log("background.js: showing v3.1 important upgrade message");
-                    save({ "upgrade_3.1": true }, "local");
-                    return chrome.tabs.create({"url": "upgraded/3.1.html" });
-                }
 
                 log("Try to show welcome on %s: %s (should only show on install)", details.reason, canShowWelcome);
                 // on initial install, or every 6 months, show Welcome Page

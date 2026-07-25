@@ -1,3 +1,12 @@
+v4.0.0
+ * The extension is now TabSetGo: a free and open source (MIT) hard fork of
+   New Tab Redirect by Jim Schubert, with new icons and a new home at
+   https://github.com/bilbospocketses/TabSetGo
+ * Settings sync is now strictly opt-in: legacy flag values are normalized,
+   the sync checkbox state roams with your other settings, and other machines
+   can no longer overwrite this machine's URL while sync is off.
+ * Removed the donation page and personal contact details from the original
+   project; bugs and feature requests go to the GitHub issue tracker.
 v3.2.0
  * Fix bug where the redirect URL was ignored (New Tab Redirect apps page shown
    instead) after the local copy of settings was lost. The new tab page now

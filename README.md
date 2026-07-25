@@ -1,69 +1,84 @@
-# NewTab Redirect!
+# TabSetGo
 
-## Google Chrome Extension
-_disclaimer: Google and Google Chrome are trademarks of Google, Inc. [NewTab Redirect! is an extension for Google Chrome](https://chrome.google.com/webstore/detail/new-tab-redirect/icpgjfneehieebagbmdbhnlpiopdcmna?hl=en)_
+[![e2e](https://github.com/bilbospocketses/TabSetGo/actions/workflows/e2e.yml/badge.svg)](https://github.com/bilbospocketses/TabSetGo/actions/workflows/e2e.yml)
 
-Sets a custom URL to load in new tabs.  Choose from:
- *  Chrome's about pages
- *  NewTab
- *  Extensions
- *  Downloads
- *  History
- *  Popular URLs
- *  Your own URL
- 
-Your custom tab can also be a local file, allowing you to create your own new tab page. Saving blank text will cause your new tab to be about:blank.
+Ready, set, go: every new tab opens the URL you choose.
 
-Files can begin with: `file:\\`, `file://`, and `file:///`
+TabSetGo is a hard fork of [New Tab Redirect](https://github.com/jimschubert/NewTab-Redirect)
+by Jim Schubert (MIT, with attribution — the original author explicitly
+welcomed renamed forks). The fork exists because the original is unmaintained
+and suffered from a long-standing settings bug; see *What the fork fixes* below.
 
-**Important:** 
-This is not meant to replace your homepage, only new tabs.  If your browser is set to load the New Tab page as your homepage, there may be odd consequences.
+## Features
 
-## Missing Local Files?
+Sets a custom URL to load in new tabs. Choose from:
 
-This is due to a change in Google Chrome, not a change to the extension.
+* Chrome's about pages
+* NewTab, Extensions, Downloads, History
+* Popular URLs
+* Your own URL — including a local file (`file:///...`), so you can build your
+  own new tab page
+* Or leave the URL blank for the built-in Apps page (clear, focused address
+  bar, optional top sites + bookmarks bar)
 
-You'll now need to navigate to `chrome://extensions` and find the New Tab Redirect options. Click Details here, then scroll down and toggle on `Allow access to file URLs`.
+Settings sync across machines is **opt-in** (options page → "Sync this URL
+across browsers?"). It rides your browser's account sync, so it works in
+Chrome when you're signed in with sync on; Edge and Brave don't roam extension
+data, so settings stay per-machine there.
 
-Chrome doesn't allow for an extension developer to warn/notify on changed behavior, and there's no logical place for me to embed browser tutorials into the extension. Whenever you see an extension update with changed permissions, you should always be reviewing the extension's settings and detais.
+**Important:** this replaces new tabs only, not your homepage. If your
+homepage is set to the New Tab page, there may be odd consequences.
 
-## Omnibar support
+## What the fork fixes
 
-If you use the built-in New Tab Redirect Apps page, you will be able to type directly into the omnibar. If you use a custom url, the architecture of the extension can not allow for focusing or clearing of the omnibar.
+The original extension's new tab page read `storage.local` while its options
+page (in sync mode) wrote only `storage.sync`, bridged by a background mirror
+that Chrome never triggers for same-value writes. Once the local copy of your
+URL was lost, re-saving it could never repair the extension — every new tab
+showed the built-in apps page instead
+([upstream #235](https://github.com/jimschubert/NewTab-Redirect/issues/235)).
 
-Google Chrome extensions do not currently have access to interact with the omnibar for highlighting after the new page is created.  There is an experimental API to retrieve values and detect user input in the omnibar, but it does not allow extensions to highlight the text.  I've tested version 1.0.1 of New Tab Redirect! across numerous developer builds, and the cursor only occasionally ends at the end of the omnibar.  However, this is handled by Chrome itself and can not be modified via the extension.  As soon as Chrome offers this functionality, I will implement it.  Until then, it is possible to use `CTRL+L` to quickly highlight the omnibar.
+TabSetGo makes the settings store self-healing (the new tab page falls back to
+the synced copy and repairs local storage), saves always write the store the
+new tab page actually reads, and makes sync strictly opt-in — other machines
+can no longer overwrite your URL while sync is off. See
+[CHANGELOG.md](CHANGELOG.md) for the full list.
 
-## "Can I purchase your extension?"
+## Install
 
-**Absolutely not.**
+* Chrome Web Store / Edge Add-ons: listings coming soon.
+* From source: clone this repo, open `chrome://extensions`, enable Developer
+  mode, click **Load unpacked**, and select the repo folder.
 
-I get emails asking this question at least once a week. This extension is not now, nor will it ever be, for sale. I've turned down offers between $100 and $50,000: I'm obviously not kidding about this so please don't continuously pester me and waste my free time.
+### Missing local files?
 
-First of all, this extension is released under the MIT license. You are basically free to release this extension under a different name and of course provide attribution to me in some way. This extension will **always** be 100% free and open source in this way. You'll be starting your user base at 0, that's just how it works.
+To redirect to a `file:///` URL, go to `chrome://extensions`, open TabSetGo's
+**Details**, and toggle on **Allow access to file URLs**.
 
-Secondly, the only reason people have asked to purchase this extension is because it has nearly a million regular users. Many developers are looking for some quick cash and attempt to purchase very popular extensions so they can secretly add anonymous data gathering, injected ads, or some other third-party code.  I don't like that crap in extensions I use, why would I want it in an extension I've created? I respect my users far too much to allow for this kind of shady business to happen to my extension. Again, I'm not joking. I've discovered an extension I loved silently sending every visited page to a third-part marketing firm. I immediately reported that extension to Google and it was removed from the web store *within two hours*. 
+### Omnibar focus
 
-I don't need supplemental income, so don't ask to purchase the extension or try to get me to include your code with my code. If you want to contribute, that's fine, but I will *absolutely never* include code that sends or receives data anywhere other than syncing with the user's Google Account.
+With the built-in Apps page you can type straight into the address bar. With a
+custom URL, the browser controls address bar focus and extensions cannot
+change it — `CTRL+L` jumps to the address bar.
 
-Lastly, the only way to sell you my extension with all those coveted users would be to relinquish the rights to my Google Account (james.schubert@gmail.com). This account is about 90% of my online identity, so that will obviously never happen. I realize it's possible to jump through hoops with Google to transfer ownership, but that's not something I'm willing to do. Sorry, it's as simple as that. If I'm wrong and transferring ownership also transfers users, I frankly don't care.
+## Development
 
-To summarize: **the extension is not for sale**
+Plain JavaScript, no build step. The only tooling is the E2E test suite:
 
-## No affiliation with Google!
+```
+npm ci
+npm run test:e2e
+```
 
-_I am not affiliated with Google or Google Chrome.  
-Google Chrome is a registered trademark of Google, Inc._
+The suite loads the unpacked extension in Chromium (new headless) via
+Playwright and covers the self-heal path, save semantics, and the sync opt-in.
+CI runs it on every push and pull request.
 
-If I have some free time, I don't mind answering questions related to other issues you're having with Google Chrome (outside of the New Tab Redirect extension). I don't have a lot of free time, though.
+## Credits & license
 
-## Legal
+MIT — see [LICENSE](LICENSE). Based on New Tab Redirect, © Jim Schubert.
+AngularJS (MIT), Font Awesome (MIT/SIL OFL 1.1). Some images carry their own
+licenses — see [images/README.md](images/README.md).
 
-NewTab Redirect is released under the [MIT license](http://bit.ly/mit-license). NewTab Redirect was previously hosted on [Google Projects](http://code.google.com/p/newtabredirect/) under [GPLv3 license](http://www.gnu.org/licenses/gpl.html). You *may not* redistribute this software without proper attribution.
-
-* AngularJS: Code is MIT Licensed. Details are available [here](https://github.com/angular/angular.js/blob/master/LICENSE)
-
-* jQuery: Code is MIT Licensed. Details are available [here](https://github.com/jquery/jquery/blob/master/MIT-LICENSE.txt)
-
-* Font Awesome by Dave Gandy - http://fontawesome.io: Code is MIT licensed, Fonts are SIL OFL 1.1. Details are available [here](http://fontawesome.io/license/)
-
-* The new tab and document-new icons were released by <em>tango!</em> into the public domain.  Details are available [here](http://en.wikipedia.org/wiki/File:Tab-new.svg)
+*Google Chrome is a trademark of Google, Inc.; Microsoft Edge is a trademark
+of Microsoft Corporation. This project is affiliated with neither.*
