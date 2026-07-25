@@ -66,6 +66,9 @@
                                 <span class="provider-note" ng-bind="p.note"></span>
                             </label>
                         </div>
+                        <div class="provider-config" ng-show="providerChoice === 'dropbox' || providerChoice === 'onedrive' || providerChoice === 'gdrive'">
+                            <button title="Connect account" ng-click="connectOAuth(providerChoice)">Connect account&#8230;</button>
+                        </div>
                         <div class="provider-config" ng-show="providerChoice === 'folder' && folderSupported">
                             <button title="Choose folder" ng-click="connectFolder()">Choose folder&#8230;</button>
                         </div>

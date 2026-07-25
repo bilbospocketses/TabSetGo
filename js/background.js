@@ -3,9 +3,14 @@
 importScripts(
     'sync/doc.js',
     'sync/providers.js',
+    'sync/config.js',
+    'sync/oauth.js',
     'sync/providers/browser.js',
     'sync/providers/folder.js',
     'sync/providers/webdav.js',
+    'sync/providers/dropbox.js',
+    'sync/providers/onedrive.js',
+    'sync/providers/gdrive.js',
     'sync/providers/fake.js',
     'sync/engine.js'
 );

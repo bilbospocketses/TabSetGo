@@ -48,6 +48,25 @@
                 });
             }
 
+            function refreshProviderAvailability() {
+                return sendSync({ 'type': 'tabsetgo-sync-list' }).then(function (res) {
+                    if (!res || !res.providers) {
+                        return;
+                    }
+                    var byId = {};
+                    res.providers.forEach(function (p) { byId[p.id] = p; });
+                    $scope.syncProviders.forEach(function (row) {
+                        if (row.id === 'dropbox' || row.id === 'onedrive' || row.id === 'gdrive') {
+                            var info = byId[row.id];
+                            row.available = !!(info && info.ok);
+                            row.note = row.available
+                                ? 'Connect your account below.'
+                                : 'Needs a one-time app registration - see docs/oauth-setup.md in the repo.';
+                        }
+                    });
+                });
+            }
+
             function loadValues() {
                 return Storage.getLocal(['syncProvider', 'theme', 'url', 'always-tab-update'])
                     .then(function (result) {
@@ -56,7 +75,8 @@
                         $scope.url = result.url;
                         $scope.alwaysTabUpdate = result['always-tab-update'];
                         return refreshSyncStatus();
-                    });
+                    })
+                    .then(refreshProviderAvailability);
             }
 
             function getOptions() {
@@ -144,6 +164,16 @@
                             $log.error('folder selection failed', e);
                         }
                     });
+            };
+
+            $scope.connectOAuth = function (id) {
+                sendSync({ 'type': 'tabsetgo-sync-connect', 'id': id }).then(function (res) {
+                    if (res && res.ok === false) {
+                        $scope.syncStatusText = 'Connect failed: ' + res.error;
+                        return null;
+                    }
+                    return loadValues();
+                });
             };
 
             $scope.webdav = { 'baseUrl': '', 'username': '', 'appPassword': '' };

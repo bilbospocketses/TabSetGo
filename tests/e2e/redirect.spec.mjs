@@ -341,6 +341,29 @@ record('S8b WebDAV pull applies newer remote settings',
   store.local.url === 'https://f.example/', `url=${JSON.stringify(store.local.url)}`);
 dav.close();
 
+// --- Scenario 9: OAuth providers gate cleanly + PKCE vector
+await setState(ops, { local: { url: TARGET } });
+await ops.reload();
+await ops.waitForTimeout(800);
+const oauthRows = await ops.evaluate(() => {
+  const out = {};
+  for (const id of ['dropbox', 'onedrive', 'gdrive']) {
+    const el = document.querySelector(`.provider-list input[type="radio"][value="${id}"]`);
+    out[id] = el ? el.disabled : null;
+  }
+  return out;
+});
+record('S9a unconfigured OAuth providers are disabled in the picker',
+  oauthRows.dropbox === true && oauthRows.onedrive === true && oauthRows.gdrive === true,
+  JSON.stringify(oauthRows));
+
+const [swWorker] = context.serviceWorkers();
+const pkce = await swWorker.evaluate(async () => {
+  return self.TabSetGoSync.oauth.challengeFor('test');
+});
+record('S9b PKCE S256 challenge matches known vector',
+  pkce === 'n4bQgYhMfWWaL-qgxVrQFaO_TxsrC4Is0V1sFbDwCgg', `challenge=${pkce}`);
+
 await context.close();
 const failed = results.filter(r => !r.pass).length;
 console.log(`\n${results.length - failed}/${results.length} passed`);
