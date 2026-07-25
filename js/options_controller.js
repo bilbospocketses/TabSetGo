@@ -12,8 +12,10 @@
             $scope.required_permissions = Permissions.REQUIRED;
 
             function getOptions() {
-                return Storage.getLocal(['syncOptions'])
+                return Storage.getLocal(['syncOptions', 'theme'])
                     .then(function (result) {
+                        $scope.theme = (result.theme === 'light' || result.theme === 'dark') ? result.theme : 'system';
+
                         var flag = result.syncOptions;
                         // pre-storage-API versions persisted the flag as a string
                         if (typeof flag === 'string') {
@@ -67,6 +69,14 @@
 
             $scope.cancel = function () {
                 return getOptions();
+            };
+
+            $scope.changeTheme = function (selected) {
+                var theme = (selected === 'light' || selected === 'dark') ? selected : 'system';
+                Storage.saveLocal({'theme': theme});
+                if ($scope.sync) {
+                    Storage.saveSync({'theme': theme});
+                }
             };
 
             $scope.changeSync = function (selected) {
