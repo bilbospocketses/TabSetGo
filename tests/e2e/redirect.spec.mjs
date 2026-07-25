@@ -158,6 +158,55 @@ await ops.waitForTimeout(600);
 record('S5c missing flag defaults to sync off',
   (await syncCheckboxState()) === false, 'checkbox should be unchecked');
 
+// --- Scenario 6: theme system (system-follow, explicit override, all pages)
+async function bgLuminance(page) {
+  return page.evaluate(() => {
+    const c = getComputedStyle(document.body).backgroundColor.match(/\d+/g).map(Number);
+    return (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]) / 255;
+  });
+}
+
+await setState(ops, { local: { url: TARGET, syncOptions: false } });
+let themePage = await context.newPage();
+await themePage.emulateMedia({ colorScheme: 'dark' });
+await themePage.goto(`chrome-extension://${extId}/options.html`);
+await themePage.waitForTimeout(400);
+record('S6a system mode follows OS dark', (await bgLuminance(themePage)) < 0.3,
+  `lum=${(await bgLuminance(themePage)).toFixed(2)}`);
+await themePage.emulateMedia({ colorScheme: 'light' });
+await themePage.waitForTimeout(200);
+record('S6a system mode follows OS light', (await bgLuminance(themePage)) > 0.7,
+  `lum=${(await bgLuminance(themePage)).toFixed(2)}`);
+await themePage.close();
+
+// S6b: explicit choice beats the OS and persists across reload
+await setState(ops, { local: { url: TARGET, syncOptions: false } });
+themePage = await context.newPage();
+await themePage.emulateMedia({ colorScheme: 'light' });
+await themePage.goto(`chrome-extension://${extId}/options.html`);
+await themePage.click('input[ng-model="theme"][value="dark"]').catch(() => {});
+await themePage.waitForTimeout(400);
+record('S6b explicit dark beats OS light', (await bgLuminance(themePage)) < 0.3,
+  `lum=${(await bgLuminance(themePage)).toFixed(2)}`);
+await themePage.reload();
+await themePage.waitForTimeout(400);
+record('S6b explicit dark persists across reload', (await bgLuminance(themePage)) < 0.3,
+  `lum=${(await bgLuminance(themePage)).toFixed(2)}`);
+await themePage.close();
+await ops.evaluate(async () => { await chrome.storage.local.remove('theme'); });
+
+// S6c: dark tokens apply on the new tab (apps) page and welcome page
+await setState(ops, { local: { url: '', syncOptions: false } }); // empty url -> apps page renders
+for (const path of ['main.html', 'welcome.html']) {
+  themePage = await context.newPage();
+  await themePage.emulateMedia({ colorScheme: 'dark' });
+  await themePage.goto(`chrome-extension://${extId}/${path}`).catch(() => {});
+  await themePage.waitForTimeout(400);
+  record(`S6c dark tokens on ${path}`, (await bgLuminance(themePage)) < 0.3,
+    `lum=${(await bgLuminance(themePage)).toFixed(2)}`);
+  await themePage.close();
+}
+
 await context.close();
 const failed = results.filter(r => !r.pass).length;
 console.log(`\n${results.length - failed}/${results.length} passed`);

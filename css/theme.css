@@ -1,0 +1,79 @@
+/* TabSetGo theme tokens. Light is the default; dark comes from either an
+   explicit user choice (html[data-theme="dark"], set pre-paint by js/theme.js)
+   or the OS preference when the user is in System mode (no data-theme
+   attribute). An explicit light choice must beat a dark OS, hence the
+   :not([data-theme="light"]) guard on the media block. The dark token block
+   appears twice because CSS cannot share one rule across a media boundary —
+   keep the two copies identical. */
+
+:root {
+    color-scheme: light dark;
+
+    --bg: #f9f9f9;
+    --surface: #ffffff;
+    --header-bg: #e8e8e8;
+    --text: #333333;
+    --text-muted: #666666;
+    --heading: #222222;
+    --border: #d9d9d9;
+    --accent: #2f6bff;
+    --accent-contrast: #ffffff;
+    --link: #1a56db;
+    --link-hover: #0f3fa8;
+    --input-bg: #ffffff;
+    --input-border: #bbbbbb;
+    --card-shadow: rgba(0, 0, 0, 0.08);
+    --chip-bg: #eef2f8;
+    --chip-hover: #dde6f5;
+    --code-bg: #f0f0f0;
+    --selected-bg: #cfe0ff;
+}
+
+:root[data-theme="dark"] {
+    --bg: #16181d;
+    --surface: #1e2128;
+    --header-bg: #23262e;
+    --text: #d7dae0;
+    --text-muted: #9aa1ab;
+    --heading: #eceff3;
+    --border: #343945;
+    --accent: #4d84ff;
+    --accent-contrast: #0d1117;
+    --link: #7aa5ff;
+    --link-hover: #a3c0ff;
+    --input-bg: #12141a;
+    --input-border: #3c4250;
+    --card-shadow: rgba(0, 0, 0, 0.5);
+    --chip-bg: #262b35;
+    --chip-hover: #2f3542;
+    --code-bg: #262b35;
+    --selected-bg: #21396b;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --bg: #16181d;
+        --surface: #1e2128;
+        --header-bg: #23262e;
+        --text: #d7dae0;
+        --text-muted: #9aa1ab;
+        --heading: #eceff3;
+        --border: #343945;
+        --accent: #4d84ff;
+        --accent-contrast: #0d1117;
+        --link: #7aa5ff;
+        --link-hover: #a3c0ff;
+        --input-bg: #12141a;
+        --input-border: #3c4250;
+        --card-shadow: rgba(0, 0, 0, 0.5);
+        --chip-bg: #262b35;
+        --chip-hover: #2f3542;
+        --code-bg: #262b35;
+        --selected-bg: #21396b;
+    }
+}
+
+body {
+    background: var(--bg);
+    color: var(--text);
+}

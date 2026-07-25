@@ -4,7 +4,9 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <title>TabSetGo</title>
+    <script type="text/javascript" src="js/theme.js"></script>
     <script type="text/javascript" src="js/vendor/angular/angular-loader.min.js"></script>
+    <link rel="stylesheet" href="css/theme.css" type="text/css">
     <link rel="stylesheet" href="css/font-awesome.min.css" type="text/css">
     <link rel="stylesheet" href="css/common.css" type="text/css">
     <link rel="stylesheet" href="css/options.css" type="text/css">
@@ -41,6 +43,15 @@
                             <input type="checkbox" ng-model="sync" ng-change="changeSync(sync)"> Sync this URL across browsers?
                         </label>
                     </p>
+                    <div class="setting-card">
+                        <h3>Appearance</h3>
+                        <div class="segmented" role="radiogroup" aria-label="Theme">
+                            <label><input type="radio" ng-model="theme" value="system" ng-change="changeTheme(theme)"> System</label>
+                            <label><input type="radio" ng-model="theme" value="light" ng-change="changeTheme(theme)"> Light</label>
+                            <label><input type="radio" ng-model="theme" value="dark" ng-change="changeTheme(theme)"> Dark</label>
+                        </div>
+                        <p class="hint">System follows your operating system's light/dark setting. Your choice applies to the new tab page, options, and welcome pages.</p>
+                    </div>
                     <h3>One click save...</h3>
                     <div class="column2">
                         <h4>Popular Pages</h4>
