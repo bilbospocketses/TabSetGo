@@ -9,6 +9,12 @@ Historical release notes prior to this file live in [changes.txt](changes.txt).
 
 ## [Unreleased]
 
+### Added
+
+- Playwright E2E harness (`tests/e2e/`) covering the storage self-heal,
+  same-value-save repair, and the normal local-mode redirect, plus a GitHub
+  Actions workflow running it on every push and pull request.
+
 ## [3.2.0] - 2026-07-25
 
 ### Fixed

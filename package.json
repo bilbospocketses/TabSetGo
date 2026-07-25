@@ -1,0 +1,13 @@
+{
+  "name": "tabsetgo",
+  "version": "3.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Dev/test tooling for the extension. The extension itself is plain JS with no build step.",
+  "scripts": {
+    "test:e2e": "node tests/e2e/redirect.spec.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.0"
+  }
+}
