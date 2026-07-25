@@ -239,6 +239,16 @@
                     function (e) { sendResponse({ 'ok': false, 'error': String((e && e.message) || e) }); });
             return true;
         }
+        if (msg.type === 'tabsetgo-sync-list') {
+            var visible = NS.providers.list().filter(function (p) { return p.id !== 'fake'; });
+            Promise.all(visible.map(function (p) {
+                return p.isAvailable().then(function (a) {
+                    return { 'id': p.id, 'ok': a.ok, 'reason': a.reason || null };
+                });
+            })).then(function (list) { sendResponse({ 'providers': list }); },
+                function (e) { sendResponse({ 'error': String(e) }); });
+            return true;
+        }
         if (msg.type === 'tabsetgo-sync-disconnect') {
             var current = NS.providers.get(msg.id);
             (current ? current.disconnect() : Promise.resolve())
