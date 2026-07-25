@@ -116,6 +116,48 @@ await setState(ops, { local: { url: TARGET, syncOptions: false } });
 url = await openNewTab(context, extId);
 record('S3 normal local-mode redirect works', url === TARGET, `landed on ${url}`);
 
+// --- Scenario 4: the background mirror respects the sync opt-in
+await setState(ops, { local: { url: 'https://a.example/', syncOptions: false } });
+await ops.evaluate(async () => { await chrome.storage.sync.set({ url: 'https://b.example/' }); });
+await ops.waitForTimeout(1200);
+store = await readStorage(ops);
+record('S4a sync OFF: incoming sync change does not clobber local',
+  store.local.url === 'https://a.example/', `local.url=${JSON.stringify(store.local.url)}`);
+
+await setState(ops, { local: { url: 'https://a.example/', syncOptions: true } });
+await ops.evaluate(async () => { await chrome.storage.sync.set({ url: 'https://b.example/' }); });
+await ops.waitForTimeout(1200);
+store = await readStorage(ops);
+record('S4b sync ON: incoming sync change mirrors to local',
+  store.local.url === 'https://b.example/', `local.url=${JSON.stringify(store.local.url)}`);
+
+// --- Scenario 5: legacy string flags normalize; sync is strictly opt-in
+async function syncCheckboxState() {
+  return ops.evaluate(() =>
+    document.querySelector('input[type="checkbox"][ng-model="sync"]').checked);
+}
+await setState(ops, { local: { url: TARGET, syncOptions: 'true' } });
+await ops.reload();
+await ops.waitForTimeout(600);
+store = await readStorage(ops);
+record('S5a legacy "true" flag normalizes to boolean and stays enabled',
+  store.local.syncOptions === true && (await syncCheckboxState()) === true,
+  `syncOptions=${JSON.stringify(store.local.syncOptions)}`);
+
+await setState(ops, { local: { url: TARGET, syncOptions: 'false' } });
+await ops.reload();
+await ops.waitForTimeout(600);
+store = await readStorage(ops);
+record('S5b legacy "false" flag normalizes to boolean and reads as disabled',
+  store.local.syncOptions === false && (await syncCheckboxState()) === false,
+  `syncOptions=${JSON.stringify(store.local.syncOptions)}`);
+
+await setState(ops, { local: { url: TARGET } });
+await ops.reload();
+await ops.waitForTimeout(600);
+record('S5c missing flag defaults to sync off',
+  (await syncCheckboxState()) === false, 'checkbox should be unchecked');
+
 await context.close();
 const failed = results.filter(r => !r.pass).length;
 console.log(`\n${results.length - failed}/${results.length} passed`);

@@ -18,6 +18,15 @@ function init() {
     log("background.js: init()");
 }
 
+// Pre-storage-API versions persisted syncOptions as a string; normalize so
+// the strict boolean checks behave. Idempotent, runs at every worker start.
+async function normalizeLegacyOptions() {
+    var items = await chrome.storage.local.get('syncOptions');
+    if (typeof items.syncOptions === 'string') {
+        await chrome.storage.local.set({ 'syncOptions': items.syncOptions === 'true' });
+    }
+}
+
 async function saveInitial() {
     log("background.js: Initial setup.");
     var options = {};
@@ -125,7 +134,11 @@ chrome.runtime.onInstalled.addListener(function (details) {
 
 chrome.storage.onChanged.addListener(function (changes, namespace) {
     retrieve("syncOptions", "local", function (items) {
-        if (items.syncOptions == "false" || namespace != "sync") return;
+        // sync is opt-in: mirror incoming sync changes only when enabled.
+        // (The old loose-equality check let boolean false through, so other
+        // machines could clobber local settings with sync turned off.)
+        var syncEnabled = items.syncOptions === true || items.syncOptions === "true";
+        if (!syncEnabled || namespace !== "sync") return;
 
         var saveObj = {};
         for (var key in changes) {
@@ -149,8 +162,9 @@ chrome.storage.onChanged.addListener(function (changes, namespace) {
 
 function save(items, area) {
     chrome.storage.local.get(["syncOptions"], function (localQuery) {
-        if (localQuery.syncOptions == false) {
-            // if user doesn't want to save, we'll always sync to local
+        var syncEnabled = localQuery.syncOptions === true || localQuery.syncOptions === "true";
+        if (!syncEnabled) {
+            // if user doesn't want to sync, we'll always save to local
             area = "local";
         }
 
@@ -170,3 +184,4 @@ function retrieve(items, area, cb) {
 }
 
 init();
+normalizeLegacyOptions();
