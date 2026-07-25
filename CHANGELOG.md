@@ -9,6 +9,13 @@ Historical release notes prior to this file live in [changes.txt](changes.txt).
 
 ## [Unreleased]
 
+### Added
+
+- Store submission tooling: `scripts/package.ps1` builds the runtime-only
+  submission zip, `docs/store-listing.md` carries the listing copy, privacy
+  disclosures, and per-store walkthroughs, and `scripts/store-shots.mjs`
+  captures the 1280×800 listing screenshots in `docs/store-assets/`.
+
 ## [4.0.0] - 2026-07-25
 
 ### Changed
