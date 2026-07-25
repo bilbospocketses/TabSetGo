@@ -3,3 +3,5 @@
 *.swp
 *.bak
 Archive.zip
+node_modules/
+dist/
