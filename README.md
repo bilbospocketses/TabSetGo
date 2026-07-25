@@ -23,10 +23,23 @@ Sets a custom URL to load in new tabs. Choose from:
 * Light and dark themes — follows your OS by default, with a System / Light /
   Dark choice in options, applied across all pages with no white flash
 
-Settings sync across machines is **opt-in** (options page → "Sync this URL
-across browsers?"). It rides your browser's account sync, so it works in
-Chrome when you're signed in with sync on; Edge and Brave don't roam extension
-data, so settings stay per-machine there.
+Settings sync is **opt-in** and works in every Chromium browser — not just
+Chrome. Pick a provider in options:
+
+* **Browser sync** — the classic `chrome.storage.sync`; roams in Chrome only
+* **Synced folder** — a folder inside OneDrive, Google Drive for Desktop,
+  Dropbox, Syncthing, or anything else that syncs a folder (unavailable where
+  the File System Access API is disabled, e.g. Brave)
+* **WebDAV** — Nextcloud, ownCloud, Synology, or any WebDAV server, with an
+  app password
+* **Dropbox / OneDrive / Google Drive** — direct cloud sync to an app-scoped
+  folder in your own account (each needs a one-time app registration — see
+  [docs/oauth-setup.md](docs/oauth-setup.md))
+
+Plus settings **export/import** as a plain JSON file. Whatever you pick,
+`storage.local` stays the source of truth and new tabs never wait on the
+network; merges are per-key last-writer-wins. No TabSetGo servers are
+involved anywhere — see [PRIVACY.md](PRIVACY.md).
 
 **Important:** this replaces new tabs only, not your homepage. If your
 homepage is set to the New Tab page, there may be odd consequences.
