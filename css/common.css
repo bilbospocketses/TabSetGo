@@ -113,19 +113,16 @@ a[rel=publisher] img {
 
 .ghost { opacity: 0.1 !important; }
 
-.github-icon {
-  padding-left:33px;
-  background: url(../images/github_32.png) no-repeat left center;
-}
-
-.twitter-icon {
-  padding-left:33px;
-  background: url(../images/twitter_32.png) no-repeat left center;
-}
-
-.google-icon {
-  padding-left:33px;
-  background: url(../images/google_32.png) no-repeat left center;
+.github-icon::before {
+  content: "";
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  margin-right: 8px;
+  vertical-align: -3px;
+  background-color: var(--text);
+  -webkit-mask: url(../images/github-mark.svg) no-repeat center / contain;
+  mask: url(../images/github-mark.svg) no-repeat center / contain;
 }
 
 .app-icon-128 {
