@@ -21,6 +21,7 @@ async function launch() {
   const context = await chromium.launchPersistentContext('', {
     channel: 'chromium',
     headless: true,
+    acceptDownloads: true,
     args: [
       `--disable-extensions-except=${EXT_PATH}`,
       `--load-extension=${EXT_PATH}`,
@@ -98,7 +99,7 @@ record('S1 self-heals storage.local.url', store.local.url === TARGET,
   `local.url=${JSON.stringify(store.local.url)}`);
 
 // --- Scenario 2: same-value Save repairs storage.local
-await breakState(ops, { syncOptions: true });
+await breakState(ops, { syncOptions: true, syncProvider: 'browser' });
 await ops.reload();
 await ops.waitForFunction(
   t => document.querySelector('input[name="url"]')?.value === t, TARGET, { timeout: 5000 }
@@ -132,31 +133,34 @@ record('S4b sync ON: incoming sync change mirrors to local',
   store.local.url === 'https://b.example/', `local.url=${JSON.stringify(store.local.url)}`);
 
 // --- Scenario 5: legacy string flags normalize; sync is strictly opt-in
-async function syncCheckboxState() {
-  return ops.evaluate(() =>
-    document.querySelector('input[type="checkbox"][ng-model="sync"]').checked);
+// (4.1: the checkbox became a provider picker; assertions target the radios)
+async function selectedProvider() {
+  return ops.evaluate(() => {
+    const el = document.querySelector('.provider-list input[type="radio"]:checked');
+    return el ? el.value : null;
+  });
 }
 await setState(ops, { local: { url: TARGET, syncOptions: 'true' } });
 await ops.reload();
-await ops.waitForTimeout(600);
+await ops.waitForTimeout(800);
 store = await readStorage(ops);
-record('S5a legacy "true" flag normalizes to boolean and stays enabled',
-  store.local.syncOptions === true && (await syncCheckboxState()) === true,
-  `syncOptions=${JSON.stringify(store.local.syncOptions)}`);
+record('S5a legacy "true" flag normalizes and maps to browser provider',
+  store.local.syncOptions === true && (await selectedProvider()) === 'browser',
+  `syncOptions=${JSON.stringify(store.local.syncOptions)} picker=${await selectedProvider()}`);
 
 await setState(ops, { local: { url: TARGET, syncOptions: 'false' } });
 await ops.reload();
-await ops.waitForTimeout(600);
+await ops.waitForTimeout(800);
 store = await readStorage(ops);
-record('S5b legacy "false" flag normalizes to boolean and reads as disabled',
-  store.local.syncOptions === false && (await syncCheckboxState()) === false,
-  `syncOptions=${JSON.stringify(store.local.syncOptions)}`);
+record('S5b legacy "false" flag normalizes and reads as sync off',
+  store.local.syncOptions === false && (await selectedProvider()) === 'off',
+  `syncOptions=${JSON.stringify(store.local.syncOptions)} picker=${await selectedProvider()}`);
 
 await setState(ops, { local: { url: TARGET } });
 await ops.reload();
-await ops.waitForTimeout(600);
+await ops.waitForTimeout(800);
 record('S5c missing flag defaults to sync off',
-  (await syncCheckboxState()) === false, 'checkbox should be unchecked');
+  (await selectedProvider()) === 'off', `picker=${await selectedProvider()}`);
 
 // --- Scenario 6: theme system (system-follow, explicit override, all pages)
 async function bgLuminance(page) {
@@ -251,6 +255,38 @@ store = await readStorage(ops);
 record('S7c local change pushes to provider (debounced)',
   !!store.local.__fakeRemote && store.local.__fakeRemote.settings.url === 'https://c.example/',
   `remote.url=${JSON.stringify(store.local.__fakeRemote && store.local.__fakeRemote.settings.url)}`);
+
+// --- Scenario 7d/7e: import wins everywhere; export produces the doc
+await ops.reload();
+await ops.waitForTimeout(600);
+await ops.setInputFiles('#import-file', {
+  name: 'tabsetgo-settings.json',
+  mimeType: 'application/json',
+  buffer: Buffer.from(JSON.stringify({
+    version: 1, updatedAt: 1,
+    settings: { url: 'https://d.example/', theme: 'light' },
+    stamps: { url: 1, theme: 1 },
+  })),
+});
+await ops.waitForTimeout(800);
+store = await readStorage(ops);
+record('S7d import wins despite older stamps in the file',
+  store.local.url === 'https://d.example/' && store.local.theme === 'light',
+  `url=${JSON.stringify(store.local.url)} theme=${JSON.stringify(store.local.theme)}`);
+
+const downloadPromise = ops.waitForEvent('download', { timeout: 5000 }).catch(() => null);
+await ops.click('button[title="Download settings"]').catch(() => {});
+const download = await downloadPromise;
+let exported = null;
+if (download) {
+  const stream = await download.createReadStream();
+  const chunks = [];
+  for await (const chunk of stream) chunks.push(chunk);
+  try { exported = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { /* bad json */ }
+}
+record('S7e export downloads the sync document',
+  !!exported && exported.version === 1 && exported.settings.url === 'https://d.example/',
+  `exported=${exported ? 'doc v' + exported.version : 'none'}`);
 
 await context.close();
 const failed = results.filter(r => !r.pass).length;

@@ -3,34 +3,58 @@
 
     var controllers = angular.module('newTab.controllers');
 
-    controllers.controller('OptionsController', ['$scope', 'Storage', 'Permissions', '$log', 'popularPages', 'internalPages', '$timeout',
-        function ($scope, Storage, Permissions, $log, popularPages, internalPages, $timeout) {
+    controllers.controller('OptionsController', ['$scope', 'Storage', 'Permissions', '$log', 'popularPages', 'internalPages', '$timeout', '$q',
+        function ($scope, Storage, Permissions, $log, popularPages, internalPages, $timeout, $q) {
             $scope.selected = 'url';
             $scope.popular = popularPages;
             $scope.internal = internalPages;
             $scope.optional_permissions = Permissions.OPTIONAL;
             $scope.required_permissions = Permissions.REQUIRED;
 
-            function getOptions() {
-                return Storage.getLocal(['syncOptions', 'theme'])
+            // The sync engine (service worker) owns propagation; the options
+            // page always reads and writes storage.local and just asks the
+            // engine to pull before displaying.
+            $scope.syncProviders = [
+                { id: 'off', label: 'Off', note: 'Settings stay on this machine.', available: true },
+                { id: 'browser', label: 'Browser sync', note: 'Roams with your browser account in Chrome only.', available: true },
+                { id: 'folder', label: 'Synced folder', note: 'Coming soon: a folder inside OneDrive, Google Drive, Dropbox, or anything that syncs a folder.', available: false },
+                { id: 'webdav', label: 'WebDAV', note: 'Coming soon: Nextcloud, ownCloud, Synology, or any WebDAV server.', available: false },
+                { id: 'dropbox', label: 'Dropbox', note: 'Coming soon.', available: false },
+                { id: 'onedrive', label: 'OneDrive', note: 'Coming soon.', available: false },
+                { id: 'gdrive', label: 'Google Drive', note: 'Coming soon.', available: false }
+            ];
+
+            function sendSync(message) {
+                return $q.when(chrome.runtime.sendMessage(message).catch(function () { return null; }));
+            }
+
+            function refreshSyncStatus() {
+                return sendSync({ 'type': 'tabsetgo-sync-status' }).then(function (s) {
+                    if (!s || s.error) {
+                        $scope.syncStatusText = '';
+                    } else if (s.lastError) {
+                        $scope.syncStatusText = 'Last sync problem: ' + s.lastError;
+                    } else if (s.lastPull) {
+                        $scope.syncStatusText = 'Last synced ' + new Date(s.lastPull).toLocaleTimeString();
+                    } else {
+                        $scope.syncStatusText = '';
+                    }
+                });
+            }
+
+            function loadValues() {
+                return Storage.getLocal(['syncProvider', 'theme', 'url', 'always-tab-update'])
                     .then(function (result) {
                         $scope.theme = (result.theme === 'light' || result.theme === 'dark') ? result.theme : 'system';
-
-                        var flag = result.syncOptions;
-                        // pre-storage-API versions persisted the flag as a string
-                        if (typeof flag === 'string') {
-                            flag = (flag === 'true');
-                            Storage.saveLocal({'syncOptions': flag});
-                        }
-                        // sync is opt-in: only an explicit true enables it
-                        $scope.sync = flag === true;
-
-                        return Storage[$scope.sync ? 'getSync' : 'getLocal'](['url', 'always-tab-update']);
-                    })
-                    .then(function (result) {
+                        $scope.providerChoice = result.syncProvider || 'off';
                         $scope.url = result.url;
                         $scope.alwaysTabUpdate = result['always-tab-update'];
+                        return refreshSyncStatus();
                     });
+            }
+
+            function getOptions() {
+                return sendSync({ 'type': 'tabsetgo-sync-now' }).then(loadValues);
             }
 
             function getPermissions() {
@@ -45,14 +69,9 @@
                     'url': $scope.url,
                     'always-tab-update': $scope.alwaysTabUpdate
                 };
-                // The new tab page reads storage.local, so always write there
-                // first; sync is the roaming copy, not the source of truth.
-                // Relying on the background onChanged mirror breaks on
-                // same-value saves because Chrome suppresses the event. (#235)
-                var promise = Storage.saveLocal(options)
-                    .then(function () {
-                        return $scope.sync ? Storage.saveSync(options) : null;
-                    });
+                // storage.local is the source of truth; the sync engine
+                // observes the change and propagates to the active provider.
+                var promise = Storage.saveLocal(options);
                 promise.then(function () {
                     $scope.show_saved = true;
                     $timeout(function () {
@@ -74,34 +93,75 @@
             $scope.changeTheme = function (selected) {
                 var theme = (selected === 'light' || selected === 'dark') ? selected : 'system';
                 Storage.saveLocal({'theme': theme});
-                if ($scope.sync) {
-                    Storage.saveSync({'theme': theme});
-                }
             };
 
-            $scope.changeSync = function (selected) {
-                selected = selected === true;
-                Storage.saveLocal({'syncOptions': selected});
-                // roam the flag itself so a fresh install on another machine
-                // can restore settings at install time
-                Storage.saveSync({'syncOptions': selected});
+            $scope.changeSyncProvider = function (id) {
+                sendSync({ 'type': 'tabsetgo-sync-set-provider', 'id': id })
+                    .then(loadValues);
             };
+
+            $scope.syncNow = function () {
+                sendSync({ 'type': 'tabsetgo-sync-now' }).then(loadValues);
+            };
+
+            $scope.exportSettings = function () {
+                Storage.getLocal(['url', 'always-tab-update', 'theme', 'syncStamps'])
+                    .then(function (items) {
+                        var settings = {};
+                        ['url', 'always-tab-update', 'theme'].forEach(function (k) {
+                            if (items[k] !== undefined) {
+                                settings[k] = items[k];
+                            }
+                        });
+                        var doc = {
+                            'version': 1,
+                            'updatedAt': Date.now(),
+                            'settings': settings,
+                            'stamps': items.syncStamps || {}
+                        };
+                        var blob = new Blob([JSON.stringify(doc, null, 2)], { 'type': 'application/json' });
+                        var a = document.createElement('a');
+                        a.href = URL.createObjectURL(blob);
+                        a.download = 'tabsetgo-settings.json';
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        $timeout(function () { URL.revokeObjectURL(a.href); }, 10000);
+                    });
+            };
+
+            $scope.importSettingsClick = function () {
+                document.getElementById('import-file').click();
+            };
+
+            var importInput = document.getElementById('import-file');
+            if (importInput) {
+                importInput.addEventListener('change', function () {
+                    var file = importInput.files && importInput.files[0];
+                    if (!file) {
+                        return;
+                    }
+                    file.text().then(function (text) {
+                        return chrome.runtime.sendMessage({
+                            'type': 'tabsetgo-sync-import',
+                            'doc': JSON.parse(text)
+                        });
+                    }).then(function () {
+                        importInput.value = '';
+                        $scope.$apply(function () {
+                            loadValues();
+                            $scope.show_saved = true;
+                            $timeout(function () { $scope.show_saved = false; }, 3500);
+                        });
+                    }).catch(function (e) {
+                        importInput.value = '';
+                        $log.error('import failed', e);
+                    });
+                });
+            }
 
             $scope.changeRedirect = function (selected) {
                 Storage.saveLocal({'always-tab-update': selected});
-            };
-
-            $scope.getSyncedUrl = function () {
-                Storage.getSync(['url'])
-                    .then(function (result) {
-                        // empty string is meaningful: it selects the apps page
-                        if (result.url !== undefined) {
-                            $scope.url = result.url;
-                        }
-                    })
-                    .then(function () {
-                        $scope.save();
-                    });
             };
 
             $scope.grant = function (permission) {
