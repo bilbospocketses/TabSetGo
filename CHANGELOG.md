@@ -9,6 +9,36 @@ Historical release notes prior to this file live in [changes.txt](changes.txt).
 
 ## [Unreleased]
 
+## [4.1.0] - 2026-07-25
+
+### Added
+
+- Universal settings sync across all Chromium browsers via pluggable
+  providers: Browser sync (Chrome-only roaming, as before), a synced local
+  folder (rides the OneDrive / Google Drive for Desktop / Dropbox / Syncthing
+  desktop clients), WebDAV (Nextcloud, ownCloud, Synology, or any server),
+  plus Dropbox, OneDrive, and Google Drive cloud providers (these activate
+  once their one-time app registrations in `docs/oauth-setup.md` are
+  completed). Per-key last-writer-wins merge; `storage.local` stays
+  authoritative and new tabs never wait on the network.
+- Settings export/import as a JSON file — imports deliberately win over
+  synced values everywhere.
+
+### Changed
+
+- The sync checkbox became a provider picker with per-provider status,
+  connect flows, and a Sync now button. The synced-folder row self-disables
+  with an explanation (and citations) in browsers that remove the File
+  System Access API, such as Brave.
+
+### Fixed
+
+- All three host permissions shipped since the MV3 migration
+  (`*://*`, `file://`, `file:///`) were invalid match patterns that Chrome
+  silently ignored, leaving the extension with no host access — which broke
+  favicon rendering on the quick-save chips and any cross-origin fetch. Now
+  `<all_urls>`.
+
 ## [4.0.0] - 2026-07-25
 
 ### Added

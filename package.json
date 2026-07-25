@@ -1,6 +1,6 @@
 {
   "name": "tabsetgo",
-  "version": "4.0.0",
+  "version": "4.1.0",
   "private": true,
   "type": "module",
   "description": "Dev/test tooling for the extension. The extension itself is plain JS with no build step.",

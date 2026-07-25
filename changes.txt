@@ -1,3 +1,14 @@
+v4.1.0
+ * New: sync your settings in ANY Chromium browser, not just Chrome. Pick a
+   provider in options: your browser account, a synced folder (OneDrive,
+   Google Drive for Desktop, Dropbox, Syncthing...), your own WebDAV server
+   (Nextcloud and friends), or Dropbox / OneDrive / Google Drive directly.
+   All opt-in; settings stay on this machine by default.
+ * New: download your settings as a file, or load one - handy for backups
+   and moving between browsers.
+ * Fix: favicons on the one-click save chips render again (the extension's
+   host permissions had been silently invalid since the Manifest V3
+   migration).
 v4.0.0
  * New: light and dark themes. Follows your OS by default, with a
    System/Light/Dark choice in options, applied to all pages.

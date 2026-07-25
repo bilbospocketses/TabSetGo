@@ -31,6 +31,12 @@ zip to both stores.
   > silently restores it from your synced copy instead of forgetting your
   > URL. Cross-device sync of your settings is strictly opt-in.
   >
+  > And sync works in every Chromium browser — not just Chrome. Pick your
+  > transport: your browser account, a synced folder (OneDrive, Google Drive
+  > for Desktop, Dropbox, Syncthing), your own WebDAV server (Nextcloud and
+  > friends), or connect Dropbox, OneDrive, or Google Drive directly. You can
+  > also download your settings as a file and load them anywhere.
+  >
   > TabSetGo is free and open source (MIT):
   > https://github.com/bilbospocketses/TabSetGo
   > It is a maintained hard fork of "New Tab Redirect" by Jim Schubert, with
@@ -58,9 +64,13 @@ zip to both stores.
   - `storage` — save the redirect URL and preferences.
   - `favicon` — render site icons for bookmarks/top sites on the built-in
     Apps page and options quick-links.
-  - Host permissions (`*://*`, `file://`) — required for the favicon API to
-    resolve icons for arbitrary user bookmarks, and to allow redirecting new
-    tabs to any user-chosen URL including local files.
+  - Host permissions (`<all_urls>`) — required for the favicon API to
+    resolve icons for arbitrary user bookmarks, to allow redirecting new
+    tabs to any user-chosen URL including local files, and — only when the
+    user opts into cloud sync — to talk directly to the provider they chose
+    (their own WebDAV server or Dropbox/Microsoft/Google APIs).
+  - `alarms` — periodic background sync pulls (15-minute interval) when a
+    sync provider is enabled.
   - Optional `tabs` / `topSites` / `management` / `bookmarks` — power the
     built-in Apps page features; requested at runtime only if the user
     enables those features, deniable at any time in options.
