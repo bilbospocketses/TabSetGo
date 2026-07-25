@@ -74,15 +74,6 @@ ul.options-tabs li:not(.selected) a:hover {
     font-weight: 800;
 }
 
-.column2 {
-    -webkit-column-count: 2;
-    -webkit-column-gap: 12px;
-}
-
-.column2 h4 {
-    -webkit-column-span: all;
-}
-
 h3 { margin: 8px 0; }
 h4 { margin: 4px 0; }
 
@@ -135,4 +126,131 @@ h4 { margin: 4px 0; }
        display:none !important;
     }
 
+}
+
+/* ---- modern refresh (cards, hints, chips, segmented control) ---- */
+
+.setting-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 18px 12px;
+    margin: 14px 0;
+    box-shadow: 0 1px 3px var(--card-shadow);
+}
+
+.setting-card h3 {
+    margin: 0 0 8px;
+    color: var(--heading);
+    font-size: 1.05em;
+}
+
+.setting-card h4 {
+    margin: 10px 0 4px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    font-size: 0.75em;
+    letter-spacing: 0.06em;
+}
+
+.hint {
+    color: var(--text-muted);
+    font-size: 0.85em;
+    line-height: 1.45;
+    margin: 8px 0 2px;
+}
+
+.hint code {
+    background: var(--code-bg);
+    padding: 1px 4px;
+    border-radius: 4px;
+}
+
+.url-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.url-row input[name="url"] {
+    flex: 1;
+    min-width: 0;
+}
+
+.options-container input[type="search"] {
+    background: var(--input-bg);
+    color: var(--text);
+    border: 1px solid var(--input-border);
+    border-radius: 8px;
+    padding: 7px 10px;
+    outline: none;
+}
+
+.options-container input[type="search"]:focus {
+    border-color: var(--accent);
+}
+
+.options-container button {
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--input-border);
+    border-radius: 8px;
+    padding: 7px 12px;
+    cursor: pointer;
+}
+
+.options-container button:hover {
+    border-color: var(--accent);
+}
+
+.options-container button[title="Save"] {
+    background: var(--accent);
+    color: var(--accent-contrast);
+    border-color: var(--accent);
+    font-weight: 600;
+}
+
+.segmented {
+    display: inline-flex;
+    gap: 14px;
+    align-items: center;
+}
+
+.segmented label {
+    cursor: pointer;
+    padding: 4px 10px;
+    border-radius: 8px;
+}
+
+.segmented label:has(input:checked) {
+    background: var(--selected-bg);
+}
+
+.chip-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+a.chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--chip-bg);
+    color: var(--text);
+    border-radius: 999px;
+    padding: 5px 12px;
+    font-size: 0.9em;
+    text-decoration: none;
+}
+
+a.chip:hover {
+    background: var(--chip-hover);
+    text-decoration: none;
+}
+
+a.chip i.fa {
+    width: 16px;
+    height: 16px;
 }
