@@ -41,8 +41,11 @@ zip to both stores.
   > page. No data is collected or transmitted anywhere; your settings live
   > in browser storage (and your browser account's sync, only if you opt in).
 
-- **Screenshots:** `docs/store-assets/` (1280×800): options page, welcome page.
-- **Icon:** `images/icon128.png` (store listing icon).
+- **Screenshots:** `docs/store-assets/` (1280×800): options in light and dark
+  (`options-light.png`, `options-dark.png`), welcome (`welcome.png`).
+- **Icon:** `images/icon128.png` (store listing icon; 512px master in
+  `docs/store-assets/icon512.png`).
+- **Privacy policy URL:** https://github.com/bilbospocketses/TabSetGo/blob/master/PRIVACY.md
 
 ## Privacy disclosures
 

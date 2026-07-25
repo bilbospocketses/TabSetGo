@@ -9,16 +9,29 @@ Historical release notes prior to this file live in [changes.txt](changes.txt).
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-07-25
+
 ### Added
 
+- Theme system: follows the OS by default with a System / Light / Dark choice
+  in options, applied across the new tab, options, and welcome pages via CSS
+  tokens with a pre-paint stamp (no white flash on new tabs). The choice
+  roams with the sync opt-in like other settings.
+- `PRIVACY.md` — no collection, no transmission, no remote code.
 - Store submission tooling: `scripts/package.ps1` builds the runtime-only
   submission zip, `docs/store-listing.md` carries the listing copy, privacy
   disclosures, and per-store walkthroughs, and `scripts/store-shots.mjs`
-  captures the 1280×800 listing screenshots in `docs/store-assets/`.
-
-## [4.0.0] - 2026-07-25
+  captures the 1280×800 listing screenshots (light + dark) in
+  `docs/store-assets/`.
 
 ### Changed
+
+- Options page modernized into labeled setting cards with plain-language
+  helper text under every control; quick saves became chips.
+- Legacy images modernized: official Octicons GitHub mark and hand-authored
+  chevrons rendered as theme-aware CSS masks, orphaned 2012-era art removed,
+  welcome intro previews regenerated from the live UI
+  (`scripts/intro-shots.mjs`).
 
 - Rebranded to **TabSetGo** — a hard fork of
   [New Tab Redirect](https://github.com/jimschubert/NewTab-Redirect) by

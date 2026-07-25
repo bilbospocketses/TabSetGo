@@ -1,4 +1,8 @@
 v4.0.0
+ * New: light and dark themes. Follows your OS by default, with a
+   System/Light/Dark choice in options, applied to all pages.
+ * Options page redesigned into descriptive setting cards that explain what
+   each setting actually does; images modernized.
  * The extension is now TabSetGo: a free and open source (MIT) hard fork of
    New Tab Redirect by Jim Schubert, with new icons and a new home at
    https://github.com/bilbospocketses/TabSetGo
