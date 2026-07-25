@@ -1,5 +1,12 @@
-/*global chrome*/
+/*global chrome,importScripts*/
 'use strict';
+importScripts(
+    'sync/doc.js',
+    'sync/providers.js',
+    'sync/providers/browser.js',
+    'sync/providers/fake.js',
+    'sync/engine.js'
+);
 var slice = Array.prototype.slice;
 var manifest = chrome.runtime.getManifest();
 var allOptions = ["usingStorageApi", "url", "syncOptions", "lastInstall", "showWelcome", "upgrade_3.1", "always-tab-update"];
@@ -178,3 +185,4 @@ function retrieve(items, area, cb) {
 
 init();
 normalizeLegacyOptions();
+self.TabSetGoSync.engine.init();

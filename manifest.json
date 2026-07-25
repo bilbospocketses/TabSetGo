@@ -11,7 +11,7 @@
   "chrome_url_overrides": {
     "newtab": "main.html"
   },
-  "permissions": ["storage", "favicon"],
+  "permissions": ["storage", "favicon", "alarms"],
   "host_permissions": ["file:///", "file://", "*://*"],
   "optional_permissions": ["tabs", "topSites", "management", "bookmarks"],
   "icons": {

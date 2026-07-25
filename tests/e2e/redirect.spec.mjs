@@ -207,6 +207,51 @@ for (const path of ['main.html', 'welcome.html']) {
   await themePage.close();
 }
 
+// --- Scenario 7: sync engine (migration, LWW merge, debounced push)
+await setState(ops, { local: { url: TARGET, syncOptions: true } });
+await ops.evaluate(async () => {
+  await chrome.runtime.sendMessage({ type: 'tabsetgo-sync-now' }).catch(() => {});
+});
+await ops.waitForTimeout(600);
+store = await readStorage(ops);
+record('S7a legacy syncOptions migrates to browser provider',
+  store.local.syncProvider === 'browser',
+  `syncProvider=${JSON.stringify(store.local.syncProvider)}`);
+
+await setState(ops, {
+  local: {
+    url: 'https://a.example/', theme: 'dark',
+    __testFakeProvider: true, syncProvider: 'fake', syncOptions: false,
+  },
+});
+await ops.waitForTimeout(2600); // let seed-write stamp bumps + debounce push settle
+await ops.evaluate(async () => {
+  await chrome.storage.local.set({
+    syncStamps: { url: 1000, theme: 5000 },
+    __fakeRemote: {
+      version: 1, updatedAt: 2000,
+      settings: { url: 'https://b.example/', theme: 'light' },
+      stamps: { url: 2000, theme: 400 },
+    },
+  });
+  await chrome.runtime.sendMessage({ type: 'tabsetgo-sync-now' }).catch(() => {});
+});
+await ops.waitForTimeout(800);
+store = await readStorage(ops);
+record('S7b LWW: newer remote key applies locally',
+  store.local.url === 'https://b.example/', `url=${JSON.stringify(store.local.url)}`);
+record('S7b LWW: newer local key survives remote',
+  store.local.theme === 'dark', `theme=${JSON.stringify(store.local.theme)}`);
+
+await ops.evaluate(async () => {
+  await chrome.storage.local.set({ url: 'https://c.example/' });
+});
+await ops.waitForTimeout(3800); // stamp bump + 2s debounce + slack
+store = await readStorage(ops);
+record('S7c local change pushes to provider (debounced)',
+  !!store.local.__fakeRemote && store.local.__fakeRemote.settings.url === 'https://c.example/',
+  `remote.url=${JSON.stringify(store.local.__fakeRemote && store.local.__fakeRemote.settings.url)}`);
+
 await context.close();
 const failed = results.filter(r => !r.pass).length;
 console.log(`\n${results.length - failed}/${results.length} passed`);
