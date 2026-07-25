@@ -9,7 +9,7 @@
                 bookmarks_count_key = 'ntr.bookmark_count',
                 top_count_key = 'ntr.top_count';
 
-            $scope.extension_name = "New Tab Redirect!";
+            $scope.extension_name = "TabSetGo";
             $scope.enable_bookmarks = false;
             $scope.enable_top = false;
             $scope.bookmarks = [];

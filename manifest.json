@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "New Tab Redirect",
-  "short_name": "NTR!",
-  "description": "Allows a user to provide the URL of the page that loads in a new tab.",
-  "version": "3.2.0",
+  "name": "TabSetGo",
+  "short_name": "TabSetGo",
+  "description": "Ready, set, go: every new tab opens the URL you choose. Self-healing settings and optional cross-device sync.",
+  "version": "4.0.0",
   "background": {
     "service_worker" : "js/background.js"
   },

@@ -9,6 +9,17 @@ Historical release notes prior to this file live in [changes.txt](changes.txt).
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-07-25
+
+### Changed
+
+- Rebranded to **TabSetGo** — a hard fork of
+  [New Tab Redirect](https://github.com/jimschubert/NewTab-Redirect) by
+  Jim Schubert (MIT, with attribution). New name, new icons, and rewritten
+  in-app pages: the donation page and personal contact details are gone, bug
+  reports go to this repository's issue tracker, and the legacy one-shot
+  `upgraded/3.1.html` page (unreachable since v3.2) was removed.
+
 ### Fixed
 
 - The background mirror copied incoming sync changes into local storage even
