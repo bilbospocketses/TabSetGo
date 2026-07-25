@@ -14,11 +14,17 @@
             // The sync engine (service worker) owns propagation; the options
             // page always reads and writes storage.local and just asks the
             // engine to pull before displaying.
+            $scope.folderSupported = (typeof window.showDirectoryPicker === 'function');
+
             $scope.syncProviders = [
                 { id: 'off', label: 'Off', note: 'Settings stay on this machine.', available: true },
                 { id: 'browser', label: 'Browser sync', note: 'Roams with your browser account in Chrome only.', available: true },
-                { id: 'folder', label: 'Synced folder', note: 'Coming soon: a folder inside OneDrive, Google Drive, Dropbox, or anything that syncs a folder.', available: false },
-                { id: 'webdav', label: 'WebDAV', note: 'Coming soon: Nextcloud, ownCloud, Synology, or any WebDAV server.', available: false },
+                { id: 'folder', label: 'Synced folder',
+                    note: $scope.folderSupported
+                        ? 'A folder inside OneDrive, Google Drive, Dropbox, or anything else that syncs a folder.'
+                        : 'Not available in this browser (see note below).',
+                    available: $scope.folderSupported },
+                { id: 'webdav', label: 'WebDAV', note: 'Nextcloud, ownCloud, Synology, or any WebDAV server.', available: true },
                 { id: 'dropbox', label: 'Dropbox', note: 'Coming soon.', available: false },
                 { id: 'onedrive', label: 'OneDrive', note: 'Coming soon.', available: false },
                 { id: 'gdrive', label: 'Google Drive', note: 'Coming soon.', available: false }
@@ -102,6 +108,63 @@
 
             $scope.syncNow = function () {
                 sendSync({ 'type': 'tabsetgo-sync-now' }).then(loadValues);
+            };
+
+            function storeFolderHandle(handle) {
+                return new Promise(function (resolve, reject) {
+                    var req = indexedDB.open('tabsetgo-sync', 1);
+                    req.onupgradeneeded = function () {
+                        req.result.createObjectStore('handles');
+                    };
+                    req.onerror = function () { reject(req.error); };
+                    req.onsuccess = function () {
+                        var tx = req.result.transaction('handles', 'readwrite');
+                        tx.objectStore('handles').put(handle, 'folder');
+                        tx.oncomplete = resolve;
+                        tx.onerror = function () { reject(tx.error); };
+                    };
+                });
+            }
+
+            $scope.connectFolder = function () {
+                // Picker needs a window + user gesture; store the handle where
+                // the service worker's folder provider can reach it.
+                window.showDirectoryPicker({ 'mode': 'readwrite' })
+                    .then(function (handle) {
+                        return storeFolderHandle(handle);
+                    })
+                    .then(function () {
+                        return sendSync({ 'type': 'tabsetgo-sync-set-provider', 'id': 'folder' });
+                    })
+                    .then(function () {
+                        loadValues();
+                    })
+                    .catch(function (e) {
+                        if (e && e.name !== 'AbortError') {
+                            $log.error('folder selection failed', e);
+                        }
+                    });
+            };
+
+            $scope.webdav = { 'baseUrl': '', 'username': '', 'appPassword': '' };
+
+            $scope.connectWebdav = function () {
+                sendSync({
+                    'type': 'tabsetgo-sync-connect',
+                    'id': 'webdav',
+                    'opts': {
+                        'baseUrl': $scope.webdav.baseUrl,
+                        'username': $scope.webdav.username,
+                        'appPassword': $scope.webdav.appPassword
+                    }
+                }).then(function (res) {
+                    if (res && res.ok === false) {
+                        $scope.syncStatusText = 'WebDAV: ' + res.error;
+                        return null;
+                    }
+                    $scope.webdav.appPassword = '';
+                    return loadValues();
+                });
             };
 
             $scope.exportSettings = function () {

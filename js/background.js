@@ -4,6 +4,8 @@ importScripts(
     'sync/doc.js',
     'sync/providers.js',
     'sync/providers/browser.js',
+    'sync/providers/folder.js',
+    'sync/providers/webdav.js',
     'sync/providers/fake.js',
     'sync/engine.js'
 );
