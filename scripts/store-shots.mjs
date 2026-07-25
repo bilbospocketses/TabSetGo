@@ -1,9 +1,10 @@
-// Capture 1280x800 store-listing screenshots from the rebranded extension.
+// Capture 1280x800 store-listing screenshots in both themes.
 import { chromium } from 'playwright';
 import { mkdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
-const EXT_PATH = 'C:/Users/jscha/source/repos/TabSetGo';
-const OUT = 'C:/Users/jscha/source/repos/TabSetGo/docs/store-assets';
+const EXT_PATH = fileURLToPath(new URL('..', import.meta.url));
+const OUT = fileURLToPath(new URL('../docs/store-assets/', import.meta.url));
 mkdirSync(OUT, { recursive: true });
 
 const context = await chromium.launchPersistentContext('', {
@@ -24,15 +25,21 @@ await page.goto(`chrome-extension://${extId}/options.html`);
 await page.evaluate(async () => {
   await chrome.storage.local.set({ url: 'https://news.ycombinator.com/', syncOptions: false });
 });
-await page.reload();
-await page.waitForFunction(() =>
-  document.querySelector('input[name="url"]')?.value.length > 0, { timeout: 5000 }).catch(() => {});
-await page.screenshot({ path: `${OUT}/options.png` });
-console.log('captured options.png');
 
-await page.goto(`chrome-extension://${extId}/welcome.html`);
-await page.waitForTimeout(800);
-await page.screenshot({ path: `${OUT}/welcome.png` });
-console.log('captured welcome.png');
+const shots = [
+  { file: 'options-light.png', theme: 'light', path: 'options.html' },
+  { file: 'options-dark.png', theme: 'dark', path: 'options.html' },
+  { file: 'welcome.png', theme: 'light', path: 'welcome.html' },
+];
 
+for (const shot of shots) {
+  await page.evaluate(async (t) => { await chrome.storage.local.set({ theme: t }); }, shot.theme);
+  await page.goto(`chrome-extension://${extId}/${shot.path}`);
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: `${OUT}/${shot.file}` });
+  console.log(`captured ${shot.file}`);
+}
+
+// leave the profile-neutral default behind
+await page.evaluate(async () => { await chrome.storage.local.remove('theme'); });
 await context.close();

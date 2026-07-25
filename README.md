@@ -20,6 +20,8 @@ Sets a custom URL to load in new tabs. Choose from:
   own new tab page
 * Or leave the URL blank for the built-in Apps page (clear, focused address
   bar, optional top sites + bookmarks bar)
+* Light and dark themes — follows your OS by default, with a System / Light /
+  Dark choice in options, applied across all pages with no white flash
 
 Settings sync across machines is **opt-in** (options page → "Sync this URL
 across browsers?"). It rides your browser's account sync, so it works in
@@ -75,6 +77,9 @@ Playwright and covers the self-heal path, save semantics, and the sync opt-in.
 CI runs it on every push and pull request.
 
 ## Credits & license
+
+No data collection, no telemetry, no external requests — see
+[PRIVACY.md](PRIVACY.md).
 
 MIT — see [LICENSE](LICENSE). Based on New Tab Redirect, © Jim Schubert.
 AngularJS (MIT), Font Awesome (MIT/SIL OFL 1.1). Some images carry their own
