@@ -288,6 +288,59 @@ record('S7e export downloads the sync document',
   !!exported && exported.version === 1 && exported.settings.url === 'https://d.example/',
   `exported=${exported ? 'doc v' + exported.version : 'none'}`);
 
+// --- Scenario 8: WebDAV provider, real roundtrip against a local server
+const { createServer } = await import('node:http');
+const davStore = new Map();
+const dav = createServer((req, res) => {
+  const chunks = [];
+  req.on('data', (c) => chunks.push(c));
+  req.on('end', () => {
+    if (req.method === 'PUT') {
+      davStore.set(req.url, Buffer.concat(chunks));
+      res.statusCode = 201;
+      res.end();
+    } else if (req.method === 'GET') {
+      const body = davStore.get(req.url);
+      if (!body) { res.statusCode = 404; res.end(); }
+      else { res.statusCode = 200; res.end(body); }
+    } else { res.statusCode = 405; res.end(); }
+  });
+});
+await new Promise((r) => dav.listen(0, '127.0.0.1', r));
+const davBase = `http://127.0.0.1:${dav.address().port}/sync`;
+
+await setState(ops, {
+  local: {
+    url: 'https://e.example/',
+    syncProvider: 'webdav',
+    webdavConfig: { baseUrl: davBase, username: 'u', appPassword: 'p' },
+  },
+});
+await ops.waitForTimeout(400);
+await ops.evaluate(async () => {
+  await chrome.runtime.sendMessage({ type: 'tabsetgo-sync-now' }).catch(() => {});
+});
+await ops.waitForTimeout(600);
+const seeded = davStore.get('/sync/tabsetgo-settings.json');
+let seededUrl = null;
+try { seededUrl = JSON.parse(seeded.toString('utf8')).settings.url; } catch { /* none */ }
+record('S8a WebDAV seeds the remote file on first sync',
+  seededUrl === 'https://e.example/', `remote.url=${JSON.stringify(seededUrl)}`);
+
+davStore.set('/sync/tabsetgo-settings.json', Buffer.from(JSON.stringify({
+  version: 1, updatedAt: 9999999999999,
+  settings: { url: 'https://f.example/' },
+  stamps: { url: 9999999999999 },
+})));
+await ops.evaluate(async () => {
+  await chrome.runtime.sendMessage({ type: 'tabsetgo-sync-now' }).catch(() => {});
+});
+await ops.waitForTimeout(600);
+store = await readStorage(ops);
+record('S8b WebDAV pull applies newer remote settings',
+  store.local.url === 'https://f.example/', `url=${JSON.stringify(store.local.url)}`);
+dav.close();
+
 await context.close();
 const failed = results.filter(r => !r.pass).length;
 console.log(`\n${results.length - failed}/${results.length} passed`);

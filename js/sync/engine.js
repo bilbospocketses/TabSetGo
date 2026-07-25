@@ -231,6 +231,22 @@
                 function (e) { sendResponse({ 'ok': false, 'error': String(e) }); });
             return true;
         }
+        if (msg.type === 'tabsetgo-sync-connect') {
+            var target = NS.providers.get(msg.id);
+            (target ? target.connect(msg.opts) : Promise.reject(new Error('unknown provider: ' + msg.id)))
+                .then(function () { return setProvider(msg.id); })
+                .then(function () { sendResponse({ 'ok': true }); },
+                    function (e) { sendResponse({ 'ok': false, 'error': String((e && e.message) || e) }); });
+            return true;
+        }
+        if (msg.type === 'tabsetgo-sync-disconnect') {
+            var current = NS.providers.get(msg.id);
+            (current ? current.disconnect() : Promise.resolve())
+                .then(function () { return setProvider('off'); })
+                .then(function () { sendResponse({ 'ok': true }); },
+                    function (e) { sendResponse({ 'ok': false, 'error': String((e && e.message) || e) }); });
+            return true;
+        }
         return false;
     });
 

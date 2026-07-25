@@ -304,3 +304,28 @@ a.chip i.fa {
     gap: 10px;
     margin-top: 8px;
 }
+
+.provider-config {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin: 8px 0 4px;
+    padding: 10px;
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+}
+
+.provider-config input[type="text"],
+.provider-config input[type="password"] {
+    background: var(--input-bg);
+    color: var(--text);
+    border: 1px solid var(--input-border);
+    border-radius: 8px;
+    padding: 6px 9px;
+    min-width: 150px;
+}
+
+.provider-config input[type="text"]:first-child {
+    flex: 1 1 100%;
+}

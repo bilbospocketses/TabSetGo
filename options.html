@@ -66,6 +66,23 @@
                                 <span class="provider-note" ng-bind="p.note"></span>
                             </label>
                         </div>
+                        <div class="provider-config" ng-show="providerChoice === 'folder' && folderSupported">
+                            <button title="Choose folder" ng-click="connectFolder()">Choose folder&#8230;</button>
+                        </div>
+                        <div class="provider-config" ng-show="providerChoice === 'webdav'">
+                            <input type="text" ng-model="webdav.baseUrl" placeholder="https://dav.example.com/files/you/tabsetgo">
+                            <input type="text" ng-model="webdav.username" placeholder="Username">
+                            <input type="password" ng-model="webdav.appPassword" placeholder="App password">
+                            <button title="Connect WebDAV" ng-click="connectWebdav()">Connect</button>
+                            <p class="hint">Use an app password, not your real password.</p>
+                        </div>
+                        <p class="hint" ng-if="!folderSupported">
+                            "Synced folder" isn't available here: some browsers disable the File System Access
+                            API it needs &#8212; Brave removes it by design
+                            (<a href="https://github.com/brave/brave-browser/issues/11407" target="_blank">Brave's position</a>,
+                            <a href="https://developer.mozilla.org/en-US/docs/Web/API/Window/showDirectoryPicker#browser_compatibility" target="_blank">MDN compatibility table</a>).
+                            The WebDAV, cloud, and backup options work everywhere.
+                        </p>
                         <div class="sync-actions">
                             <button title="Sync now" ng-click="syncNow()" ng-disabled="providerChoice === 'off'">Sync now</button>
                             <span class="hint" ng-bind="syncStatusText"></span>
