@@ -17,11 +17,18 @@
     // worker is alive, and the check is one cheap read.
     function ensureMigrated() {
         return chrome.storage.local.get(['syncProvider', 'syncOptions']).then(function (items) {
-            if (items.syncProvider !== undefined) {
-                return;
+            var updates = {};
+            var enabled = items.syncOptions === true || items.syncOptions === 'true';
+            if (typeof items.syncOptions === 'string') {
+                // pre-storage-API versions persisted the flag as a string
+                updates.syncOptions = enabled;
             }
-            var provider = items.syncOptions === true ? 'browser' : 'off';
-            return chrome.storage.local.set({ 'syncProvider': provider });
+            if (items.syncProvider === undefined) {
+                updates.syncProvider = enabled ? 'browser' : 'off';
+            }
+            if (Object.keys(updates).length) {
+                return chrome.storage.local.set(updates);
+            }
         });
     }
 

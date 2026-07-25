@@ -34,13 +34,11 @@
                             <input name="url" type="search" ng-model="url" placeholder="Default: TabSetGo 'Apps' Page" />
                             <button title="Save" ng-click="save()">Save</button>
                             <button title="Cancel" ng-click="cancel()">Cancel</button>
-                            <button title="One-time get Synced URL" ng-click="getSyncedUrl()" class="fa fa-cloud-download"></button>
                         </div>
                         <p class="hint">
                             Every new tab goes to this address. Leave it blank to use TabSetGo's built-in Apps page.
                             Local files work too (like <code>file:///C:/notes/start.html</code>) once you enable
-                            "Allow access to file URLs" for the extension. The cloud button copies a URL you
-                            saved on another synced browser.
+                            "Allow access to file URLs" for the extension.
                         </p>
                     </div>
                     <div class="setting-card">
@@ -55,14 +53,33 @@
                     </div>
                     <div class="setting-card">
                         <h3>Sync across devices</h3>
-                        <label>
-                            <input type="checkbox" ng-model="sync" ng-change="changeSync(sync)"> Sync this URL across browsers?
-                        </label>
                         <p class="hint">
-                            Off by default; your settings stay on this machine. When on, settings roam with
-                            your browser account in Chrome. Edge and Brave don't roam extension data, so
-                            settings stay per-machine there.
+                            Off by default; your settings stay on this machine. Pick a provider and TabSetGo
+                            keeps a tiny settings file there, talking only to the service you choose with
+                            your own account. We run no servers.
                         </p>
+                        <div class="provider-list">
+                            <label class="provider-row" ng-repeat="p in syncProviders" ng-class="{'disabled': !p.available}">
+                                <input type="radio" ng-model="$parent.providerChoice" value="{{p.id}}"
+                                       ng-disabled="!p.available" ng-change="changeSyncProvider($parent.providerChoice)">
+                                <span class="provider-label" ng-bind="p.label"></span>
+                                <span class="provider-note" ng-bind="p.note"></span>
+                            </label>
+                        </div>
+                        <div class="sync-actions">
+                            <button title="Sync now" ng-click="syncNow()" ng-disabled="providerChoice === 'off'">Sync now</button>
+                            <span class="hint" ng-bind="syncStatusText"></span>
+                        </div>
+                    </div>
+                    <div class="setting-card">
+                        <h3>Backup &amp; transfer</h3>
+                        <p class="hint">
+                            Download your settings as a file, or load one saved elsewhere. Loading a file
+                            deliberately wins over synced values everywhere.
+                        </p>
+                        <button title="Download settings" ng-click="exportSettings()">Download settings</button>
+                        <button title="Load settings" ng-click="importSettingsClick()">Load settings</button>
+                        <input type="file" id="import-file" accept="application/json,.json" style="display:none">
                     </div>
                     <div class="setting-card">
                         <h3>Appearance</h3>
