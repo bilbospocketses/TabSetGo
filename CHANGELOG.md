@@ -9,6 +9,21 @@ Historical release notes prior to this file live in [changes.txt](changes.txt).
 
 ## [Unreleased]
 
+### Fixed
+
+- The background mirror copied incoming sync changes into local storage even
+  with the sync option turned off (loose equality let boolean `false`
+  through), so another machine could silently overwrite this machine's
+  redirect URL. Sync is now strictly opt-in everywhere.
+- The sync checkbox state itself never reached `storage.sync`, so the
+  install-time restore on a second machine could never trigger. Toggling sync
+  now persists the flag to both storage areas.
+- Legacy string values of the sync flag (`"true"`/`"false"` from
+  pre-storage-API versions) put the options page in the wrong mode — a
+  missing or string-`"false"` flag counted as sync-*on*. Flags are normalized
+  to booleans at worker start and options load, and sync only engages on an
+  explicit `true`.
+
 ### Added
 
 - Playwright E2E harness (`tests/e2e/`) covering the storage self-heal,

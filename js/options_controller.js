@@ -14,7 +14,14 @@
             function getOptions() {
                 return Storage.getLocal(['syncOptions'])
                     .then(function (result) {
-                        $scope.sync = result.syncOptions || result.syncOptions !== false;
+                        var flag = result.syncOptions;
+                        // pre-storage-API versions persisted the flag as a string
+                        if (typeof flag === 'string') {
+                            flag = (flag === 'true');
+                            Storage.saveLocal({'syncOptions': flag});
+                        }
+                        // sync is opt-in: only an explicit true enables it
+                        $scope.sync = flag === true;
 
                         return Storage[$scope.sync ? 'getSync' : 'getLocal'](['url', 'always-tab-update']);
                     })
@@ -63,7 +70,11 @@
             };
 
             $scope.changeSync = function (selected) {
+                selected = selected === true;
                 Storage.saveLocal({'syncOptions': selected});
+                // roam the flag itself so a fresh install on another machine
+                // can restore settings at install time
+                Storage.saveSync({'syncOptions': selected});
             };
 
             $scope.changeRedirect = function (selected) {
@@ -73,11 +84,8 @@
             $scope.getSyncedUrl = function () {
                 Storage.getSync(['url'])
                     .then(function (result) {
-                        if (result.url === "") {
-                            // this means the new tab redirect apps page
-                            $scope.url = result.url;
-                        } else if (result && result !== "") {
-                            // this means there *is* a synced url, so we'll copy it over
+                        // empty string is meaningful: it selects the apps page
+                        if (result.url !== undefined) {
                             $scope.url = result.url;
                         }
                     })
