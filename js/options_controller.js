@@ -32,10 +32,18 @@
             }
 
             $scope.save = function () {
-                var promise = Storage[$scope.sync ? 'saveSync' : 'saveLocal']({
+                var options = {
                     'url': $scope.url,
                     'always-tab-update': $scope.alwaysTabUpdate
-                });
+                };
+                // The new tab page reads storage.local, so always write there
+                // first; sync is the roaming copy, not the source of truth.
+                // Relying on the background onChanged mirror breaks on
+                // same-value saves because Chrome suppresses the event. (#235)
+                var promise = Storage.saveLocal(options)
+                    .then(function () {
+                        return $scope.sync ? Storage.saveSync(options) : null;
+                    });
                 promise.then(function () {
                     $scope.show_saved = true;
                     $timeout(function () {

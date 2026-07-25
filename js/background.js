@@ -23,8 +23,10 @@ async function saveInitial() {
     var options = {};
     var arr = await chrome.storage.local.get('syncOptions');
     if (Object.keys(arr).length) {
-        log('Found options on localStorage');
-        options = JSON.parse(arr);
+        log('Found existing options in storage');
+        // storage.local.get resolves to a plain object; passing it through
+        // JSON.parse threw a SyntaxError and aborted initial setup entirely.
+        options = arr;
     }
 
     // by default, initial installs won't sync options
