@@ -1,3 +1,12 @@
+v3.2.0
+ * Fix bug where the redirect URL was ignored (New Tab Redirect apps page shown
+   instead) after the local copy of settings was lost. The new tab page now
+   falls back to the synced URL and repairs local storage. (#235)
+ * Fix bug where clicking Save without changing the URL could not repair a
+   broken state (Chrome fires no storage change event for same-value writes).
+   Options now always save to local storage directly, plus sync when enabled.
+ * Fix crash in initial setup (JSON.parse called on an object) that could leave
+   a fresh install without defaults.
 v3.1.6
  * Migrate to Manifest v3
  * Contribution from Talesh, fixing file:// loading
