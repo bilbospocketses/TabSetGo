@@ -1,0 +1,43 @@
+# Dependabot version updates for TabSetGo.
+#
+# Security updates are handled separately by Dependabot security alerts (repo
+# Settings → Code security and analysis). This file covers routine non-security
+# version bumps.
+#
+# Two ecosystems wired:
+#   - npm: covers the dev/test tooling only (playwright) — the extension itself
+#     is plain JS with no runtime dependencies and no build step.
+#   - github-actions: maintains the SHA-pinned action refs in
+#     .github/workflows/e2e.yml. Upstream actions tag new versions
+#     periodically; without this Dependabot would never bump our pins and we'd
+#     drift on security fixes shipped in the actions themselves.
+#
+# Weekly cadence keeps PR noise manageable for a solo-owned repo.
+
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    # Batch minor + patch bumps into one weekly PR. Majors still open
+    # individually for review.
+    groups:
+      npm-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    # Batch all action bumps into one PR — avoids weekly action-PR pile-ups.
+    groups:
+      actions:
+        patterns:
+          - "*"
