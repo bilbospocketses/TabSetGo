@@ -1,0 +1,84 @@
+# OpenSSF Scorecard — weekly supply-chain security scoring.
+#
+# Scores the repo on the OSSF Scorecard check suite (Branch-Protection,
+# Code-Review, Dangerous-Workflow, Dependency-Update-Tool, Maintained,
+# Pinned-Dependencies, SAST, Security-Policy, Signed-Releases,
+# Token-Permissions, etc.) and uploads SARIF to the Security tab so findings
+# sit next to CodeQL alerts.
+#
+# Cadence: weekly cron matches dependabot.yml + GitHub-managed CodeQL default
+# setup (Monday 13:00 UTC). branch_protection_rule trigger fires on ruleset
+# changes — catches regressions in the master ruleset automatically. Push
+# trigger means the published score reflects the latest master commit.
+#
+# All actions SHA-pinned per repo-level sha_pinning_required. Comments are
+# precise (# vX.Y.Z) so Dependabot's github-actions ecosystem can track
+# future bumps — bare-major comments (# v4) are a Dependabot blind spot.
+#
+# Allowlist note: repo runs allowed_actions=selected. ossf/scorecard-action@*
+# is on the explicit patterns_allowed list; github/codeql-action/* and
+# actions/* are covered by github_owned_allowed=true.
+
+name: Scorecard supply-chain security
+
+on:
+  branch_protection_rule:
+  schedule:
+    - cron: '0 13 * * 1'
+  push:
+    branches: [master]
+  # PR trigger is required because the branch ruleset lists `Scorecard
+  # analysis` in required_status_checks — without firing on PRs, the
+  # required check would never report and merges would block forever.
+  pull_request:
+    branches: [master]
+
+permissions: read-all
+
+jobs:
+  analysis:
+    name: Scorecard analysis
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write   # Upload SARIF results to the Security tab
+      id-token: write          # OIDC for publish_results to api.securityscorecards.dev
+      contents: read           # Read the checked-out repo
+      actions: read            # Read workflow run metadata
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Run analysis
+        # NOTE: pin to the COMMIT SHA, not the annotated-tag object SHA.
+        # GitHub Actions runtime accepts either as a valid `uses:` ref, but
+        # the OpenSSF webapp's publish_results verifier rejects tag-object
+        # SHAs with "imposter commit" — it checks the SHA against the repo's
+        # commit graph, and annotated-tag objects are git objects of
+        # type=tag, not type=commit.
+        uses: ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a # v2.4.3
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          # Publishes the score to api.securityscorecards.dev so the public
+          # https://scorecard.dev/viewer/?uri=github.com/bilbospocketses/TabSetGo
+          # page stays current. No PAT needed — OIDC via id-token: write.
+          # Gated to push events only — PR runs would publish a branch-HEAD
+          # SHA that isn't on master yet, which the verifier rejects with
+          # the same "imposter commit" pattern.
+          publish_results: ${{ github.event_name == 'push' }}
+
+      - name: Upload SARIF artifact (for run-level inspection)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: SARIF file
+          path: results.sarif
+          retention-days: 5
+
+      - name: Upload SARIF to Security tab
+        # Pin: COMMIT SHA dereferenced from the annotated-tag object; comment
+        # is PRECISE (vX.Y.Z) so Dependabot tracks future major bumps.
+        uses: github/codeql-action/upload-sarif@7188fc363630916deb702c7fdcf4e481b751f97a # v4.37.1
+        with:
+          sarif_file: results.sarif
