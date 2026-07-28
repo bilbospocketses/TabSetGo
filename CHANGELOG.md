@@ -9,6 +9,27 @@ Historical release notes prior to this file live in [changes.txt](changes.txt).
 
 ## [Unreleased]
 
+### Added
+
+- chore: Dependabot version updates for npm and github-actions (weekly,
+  grouped) (#17)
+- chore: OpenSSF Scorecard workflow — weekly supply-chain scoring with SARIF
+  results on the Security tab (#19)
+- docs: SECURITY.md (private advisory reporting flow), CONTRIBUTING.md, and
+  CODEOWNERS (#19)
+- Repo hardening (settings-side, no files): branch ruleset requiring the
+  `e2e` + `CodeQL` + `Scorecard analysis` checks with signed commits and
+  squash-only merges; tag ruleset protecting `v*` releases; CodeQL default
+  setup; Actions allowlist with enforced SHA pinning
+
+### Changed
+
+- docs: store-listing.md and oauth-setup.md rewritten as step-by-step
+  walkthroughs with clean copy/paste blocks and per-version permission
+  justifications (#16)
+- build(deps): actions group bumps — checkout 7.0.1, scorecard-action 2.4.4,
+  codeql-action 4.37.3 (#20)
+
 ## [4.1.0] - 2026-07-25
 
 ### Removed
