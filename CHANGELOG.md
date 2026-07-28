@@ -11,6 +11,17 @@ Historical release notes prior to this file live in [changes.txt](changes.txt).
 
 ## [4.1.0] - 2026-07-25
 
+### Removed
+
+- Unused vendored libraries no longer ship: the extension pages load only
+  `angular-loader.min.js` and `angular.min.js`, but the package carried the
+  entire AngularJS family (scenario test harness, mocks, sanitize, route,
+  touch, resource, cookies, animate, unminified builds, `errors.json`) plus
+  jQuery 1.10.2. All of it is gone — smaller install, and it clears the
+  code-scanning alerts those dead files generated. The repo's `example.html`
+  demo (not part of the package) also no longer pulls jQuery from a
+  plain-HTTP CDN; it is self-contained now.
+
 ### Added
 
 - Universal settings sync across all Chromium browsers via pluggable

@@ -345,7 +345,7 @@ dav.close();
 await setState(ops, { local: { url: TARGET } });
 await ops.reload();
 await ops.waitForTimeout(800);
-const oauthRows = await ops.evaluate(() => {
+const pickerDisabled = await ops.evaluate(() => {
   const out = {};
   for (const id of ['dropbox', 'onedrive', 'gdrive']) {
     const el = document.querySelector(`.provider-list input[type="radio"][value="${id}"]`);
@@ -354,8 +354,8 @@ const oauthRows = await ops.evaluate(() => {
   return out;
 });
 record('S9a unconfigured OAuth providers are disabled in the picker',
-  oauthRows.dropbox === true && oauthRows.onedrive === true && oauthRows.gdrive === true,
-  JSON.stringify(oauthRows));
+  pickerDisabled.dropbox === true && pickerDisabled.onedrive === true && pickerDisabled.gdrive === true,
+  JSON.stringify(pickerDisabled));
 
 const [swWorker] = context.serviceWorkers();
 const pkce = await swWorker.evaluate(async () => {
