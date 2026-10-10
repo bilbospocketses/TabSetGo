@@ -21,6 +21,9 @@ Historical release notes prior to this file live in [changes.txt](changes.txt).
   `e2e` + `CodeQL` + `Scorecard analysis` checks with signed commits and
   squash-only merges; tag ruleset protecting `v*` releases; CodeQL default
   setup; Actions allowlist with enforced SHA pinning
+- ci: American-spelling gate inside the required `e2e` job — fails a PR whose
+  added lines or commit messages use British spelling; runs
+  bilbospocketses/american-spelling pinned to v1.0.2
 
 ### Changed
 
