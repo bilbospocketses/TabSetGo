@@ -27,6 +27,12 @@ Historical release notes prior to this file live in [changes.txt](changes.txt).
 
 ### Changed
 
+- ci: the e2e job no longer stops for taking long. Its 15-minute
+  `timeout-minutes` is gone; each step that installs, downloads or tests runs
+  under a watchdog that stops it only when, for 20 minutes, it has printed no
+  line and the runner has received under 4 MiB, prints a hang record, and
+  reports the step's duration as a notice. The watchdog script is a copy of
+  `bilbospocketses/streamflex`'s.
 - docs: store-listing.md and oauth-setup.md rewritten as step-by-step
   walkthroughs with clean copy/paste blocks and per-version permission
   justifications (#16)
