@@ -1,3 +1,10 @@
+# No job has a time limit: a slow runner makes a step slow, not wrong. Each step that runs a
+# command that installs, downloads or tests runs under .github/scripts/stall-watch.sh, which stops
+# it only when, for 20 minutes, it has printed no line and the runner has received under 4 MiB,
+# prints a hang record when it does, and reports the step's duration as a notice. The script is a
+# copy of bilbospocketses/streamflex's (PR #64, 64defdd), where the rule and its measurements are
+# written up. Steps that use an action (the two checkouts) are GitHub's own and are not wrapped.
+
 name: e2e
 
 on:
@@ -11,7 +18,6 @@ permissions:
 jobs:
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -32,7 +38,7 @@ jobs:
       # gate's central allow.txt, and reaches this repo when the pin is bumped.
       # On a push to master the base is master itself, so there is nothing to scan.
       - name: Fetch the base branch
-        run: git fetch --no-tags origin "+refs/heads/${BASE}:refs/remotes/origin/${BASE}"
+        run: bash .github/scripts/stall-watch.sh --name "git fetch" -- git fetch --no-tags origin "+refs/heads/${BASE}:refs/remotes/origin/${BASE}"
         env:
           BASE: ${{ github.base_ref || github.event.repository.default_branch }}
       - name: Check out the American-spelling gate
@@ -45,6 +51,7 @@ jobs:
       - name: Check American spelling
         # The runner's own Python 3; the gate is stdlib-only.
         run: >-
+          bash .github/scripts/stall-watch.sh --name "American spelling" --
           python3 .american-spelling/check-american-spelling.py
           --repo .
           --base "origin/${BASE}"
@@ -56,6 +63,9 @@ jobs:
         # Keeps it out of the working tree the npm install and tests run in.
         run: rm -rf .american-spelling
 
-      - run: npm ci
-      - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e
+      - name: Install dependencies
+        run: bash .github/scripts/stall-watch.sh --name "npm ci" -- npm ci
+      - name: Install Playwright's chromium
+        run: bash .github/scripts/stall-watch.sh --name "playwright install" -- npx playwright install --with-deps chromium
+      - name: E2e tests
+        run: bash .github/scripts/stall-watch.sh --name "e2e tests" -- npm run test:e2e
