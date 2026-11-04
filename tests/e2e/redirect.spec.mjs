@@ -430,6 +430,13 @@ record('S7b LWW: newer remote key applies locally',
   store.local.url === 'https://b.example/', `url=${JSON.stringify(store.local.url)}`);
 record('S7b LWW: newer local key survives remote',
   store.local.theme === 'dark', `theme=${JSON.stringify(store.local.theme)}`);
+// The pull found the local theme newer and armed a push of its own, which
+// would carry the url S7c writes next. Let it land first (the remote's theme
+// turns dark), so S7c passes only on its own edit's push. Landing also puts
+// that edit past the engine's 1 s window for ignoring its own writes, inside
+// which the edit would not be stamped at all.
+await waitFor("the pull's debounced push of the newer local theme",
+  async () => (await localState(ops)).__fakeRemote?.settings?.theme === 'dark');
 
 await ops.evaluate(async () => {
   await chrome.storage.local.set({ url: 'https://c.example/' });
