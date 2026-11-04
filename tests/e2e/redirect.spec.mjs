@@ -88,8 +88,11 @@ async function launch() {
     sw.evaluate(() => chrome.storage.local.get('usingStorageApi').then((i) => i.usingStorageApi === true)));
   // The engine's periodic pull (an alarm it creates at worker start, first
   // firing 15 min later) would sync at a moment of its own choosing in a slow
-  // run. No scenario tests it, so take it out of the run.
-  await sw.evaluate(() => chrome.alarms.clear('tabsetgo-sync'));
+  // run. No scenario tests it, so take it out of the run. clear() answers true
+  // only if the alarm existed, so a renamed alarm fails here, loudly.
+  if (!(await sw.evaluate(() => chrome.alarms.clear('tabsetgo-sync')))) {
+    throw new Error("the engine's 'tabsetgo-sync' alarm was not found to clear");
+  }
   return { context, extId };
 }
 
@@ -191,6 +194,9 @@ async function drainEngine({ sync = null, empty }) {
       chrome.storage.onChanged.addListener(listener);
     });
 
+    // A worker that restarted re-created the engine's periodic-sync alarm;
+    // its pull could write the 'off' that step 3 waits for. (Usually gone.)
+    await chrome.alarms.clear('tabsetgo-sync');
     if (empty) {
       await local.set({ syncOptions: false });
       await settle();
@@ -323,6 +329,10 @@ store = await readStorage(ops);
 record('S4b sync ON: incoming sync change mirrors to local',
   store.local.url === 'https://b.example/',
   `local.url=${JSON.stringify(store.local.url)} mirror=${mirrorMs === null ? 'none' : mirrorMs.toFixed(0) + ' ms'}`);
+// Mirroring 'b' into local.url armed another debounced browser push. Let it
+// land too, so no push is left in flight when the next quiesce starts.
+await waitFor('the debounced browser push of url b',
+  async () => (await readStorage(ops)).sync.syncDoc?.settings?.url === 'https://b.example/');
 
 // S4a is an absence check: with sync off the mirror must do nothing, and doing
 // nothing writes nothing, so no event or storage value marks "the mirror has
