@@ -5,16 +5,51 @@
 // Scenario 1: broken state (sync.url present, local.url lost) must still redirect
 // Scenario 2: a same-value Save in options must repair storage.local
 // Scenario 3: regression — normal local-mode redirect still works
+//
+// No step fails for being slow. Each wait ends on the storage write, page
+// state or event it is waiting for; its only bound is a hang guard far above
+// any healthy time, and a guard that trips prints HUNG and names what it
+// waited on. The one fixed window left is S4a's, an absence check (see there).
 import { chromium } from 'playwright';
 import { fileURLToPath } from 'node:url';
 
 const EXT_PATH = fileURLToPath(new URL('../..', import.meta.url));
 const TARGET = 'https://example.com/';
+const HANG_MS = 120_000;
 const results = [];
+
+// A Playwright call that runs into HANG_MS throws a TimeoutError naming the
+// call and what it was waiting for.
+process.on('uncaughtException', (e) => {
+  if (e && e.name === 'TimeoutError') console.log(`HUNG ${e.message}`);
+  else console.error(e);
+  process.exit(1);
+});
 
 function record(name, pass, detail) {
   results.push({ name, pass, detail });
   console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}${detail ? '  -- ' + detail : ''}`);
+}
+
+function hung(what) {
+  console.log(`HUNG ${HANG_MS / 1000} s waiting for ${what}`);
+}
+
+// Poll `probe` until it returns something truthy, and return that. A probe
+// that throws (a page mid-reload) counts as not yet. After HANG_MS it prints
+// HUNG and returns the falsy value, so the step's own assertion records FAIL.
+async function waitFor(what, probe) {
+  const deadline = Date.now() + HANG_MS;
+  for (;;) {
+    let value;
+    try { value = await probe(); } catch { value = undefined; }
+    if (value) return value;
+    if (Date.now() >= deadline) {
+      hung(what);
+      return value;
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
 }
 
 async function launch() {
@@ -27,9 +62,16 @@ async function launch() {
       `--load-extension=${EXT_PATH}`,
     ],
   });
+  context.setDefaultTimeout(HANG_MS);
+  context.setDefaultNavigationTimeout(HANG_MS);
   let [sw] = context.serviceWorkers();
-  if (!sw) sw = await context.waitForEvent('serviceworker', { timeout: 10000 });
+  if (!sw) sw = await context.waitForEvent('serviceworker', { timeout: HANG_MS });
   const extId = new URL(sw.url()).host;
+  // The install handler's initial setup writes storage.local (url '' among
+  // it) whenever it gets there, which could land inside a later scenario's
+  // state. usingStorageApi is written by that setup and by nothing else.
+  await waitFor('the install-time initial settings (local.usingStorageApi)', () =>
+    sw.evaluate(() => chrome.storage.local.get('usingStorageApi').then((i) => i.usingStorageApi === true)));
   return { context, extId };
 }
 
@@ -37,7 +79,27 @@ async function launch() {
 async function storagePage(context, extId) {
   const page = await context.newPage();
   await page.goto(`chrome-extension://${extId}/options.html`);
+  await optionsReady(page);
   return page;
+}
+
+// The options page's load chain is: ask the engine to sync, then read storage
+// into the form (url field, provider radio), then the sync status, then the
+// providers' availability. The OAuth rows' "Coming soon." note is replaced only
+// by that last answer, so once it has gone the whole chain is done. (A checked
+// provider radio is no marker: the test-only 'fake' provider has no radio.)
+// With `url`, also wait until the form shows that stored url.
+async function optionsReady(page, url) {
+  return waitFor(`the options page to finish loading${url === undefined ? '' : ` with url ${url}`}`, () =>
+    page.evaluate((url) => {
+      const field = document.querySelector('input[name="url"]');
+      if (!field || (url !== undefined && field.value !== url)) return false;
+      return ['dropbox', 'onedrive', 'gdrive'].every((id) => {
+        const radio = document.querySelector(`.provider-list input[type="radio"][value="${id}"]`);
+        const note = radio && radio.closest('.provider-row').querySelector('.provider-note');
+        return note && note.textContent !== 'Coming soon.';
+      });
+    }, url));
 }
 
 async function readStorage(page) {
@@ -47,43 +109,115 @@ async function readStorage(page) {
   }));
 }
 
-async function setState(page, { local, sync }) {
-  await page.evaluate(async ({ local, sync }) => {
-    await chrome.storage.local.clear();
+function worker() {
+  const [sw] = context.serviceWorkers();
+  return sw;
+}
+
+// Empties both storage areas and leaves the sync engine idle, writing `sync`
+// (if given) along the way.
+//
+// The engine debounces a push 2 s after any change to a synced key, and that
+// push first migrates storage.local, writing syncProvider when it is unset. A
+// push left over from an earlier step can fire in the middle of the next
+// step's writes and stamp 'off' over the state it sets. So rather than sleep
+// past it, this arms the debounce itself and waits for that push to run:
+//  1. clear both areas, then write `sync`;
+//  2. set a placeholder always-tab-update with syncProvider 'off', then remove
+//     the placeholder: a synced-key change, so the engine stamps it and
+//     re-arms its single push timer;
+//  3. once that is armed, remove syncProvider and wait for the push's
+//     migration to write it back ('off', since syncOptions is unset), and for
+//     the push's own provider lookup to be answered;
+//  4. clear storage.local (it holds no synced key, so nothing re-arms).
+// syncProvider stays defined until step 3, so no earlier push can write the
+// value step 3 waits for. It runs in the service worker, so it can wait on the
+// engine's own listener (registered first, so it runs first) and on the
+// worker's storage calls, which are answered in the order they are made.
+async function quiesce(sync) {
+  const stuck = await worker().evaluate(async ({ sync, hangMs }) => {
+    const local = chrome.storage.local;
+    // Two chained round trips: the first is answered after every storage call
+    // this worker made before it; the second, after the calls those answers
+    // set off (the engine's get-then-set chains are two calls deep).
+    const settle = async () => { await local.get(null); await local.get(null); };
+    const nextLocalChange = (what, matches) => new Promise((resolve) => {
+      const guard = setTimeout(() => {
+        chrome.storage.onChanged.removeListener(listener);
+        resolve(what);
+      }, hangMs);
+      function listener(changes, ns) {
+        if (ns !== 'local' || !matches(changes)) return;
+        clearTimeout(guard);
+        chrome.storage.onChanged.removeListener(listener);
+        settle().then(() => resolve(null));
+      }
+      chrome.storage.onChanged.addListener(listener);
+    });
+
+    await local.clear();
     await chrome.storage.sync.clear();
-    if (local) await chrome.storage.local.set(local);
+    // syncOptions is unset, so the background mirror leaves local alone.
     if (sync) await chrome.storage.sync.set(sync);
-  }, { local, sync });
+    await local.set({ 'always-tab-update': 'quiesce', syncProvider: 'off' });
+    const armed = nextLocalChange('the sync engine to stamp a synced-key change',
+      (c) => c['always-tab-update'] && c['always-tab-update'].oldValue === 'quiesce');
+    await local.remove('always-tab-update');
+    let stuck = await armed;
+    if (!stuck) {
+      const pushed = nextLocalChange('the debounced push to run (its migration re-writes syncProvider)',
+        (c) => c.syncProvider && c.syncProvider.newValue === 'off');
+      await local.remove('syncProvider');
+      stuck = await pushed;
+    }
+    await local.clear();
+    return stuck;
+  }, { sync: sync || null, hangMs: HANG_MS });
+  if (stuck) hung(stuck);
+}
+
+async function setState(page, { local, sync }) {
+  await quiesce(sync);
+  if (local) await page.evaluate(async (local) => { await chrome.storage.local.set(local); }, local);
 }
 
 // The real #235 state: sync.url present, local.url gone, and NO pending sync
 // change event (writing sync fires onChanged -> the background mirror repairs
-// local, which is the healthy path, not the bug). So: seed sync, let the
-// mirror settle, then knock out local.url via a local-namespace change the
-// mirror ignores. Assert the precondition so the repro can't silently degrade.
+// local, which is the healthy path, not the bug). quiesce() seeds sync with the
+// mirror off and waits for the engine to go idle, which also proves the
+// background has handled that sync write; local.url is never written. Assert
+// the precondition so the repro can't silently degrade.
 async function breakState(page, extraLocal) {
-  await page.evaluate(async ({ t, extraLocal }) => {
-    await chrome.storage.local.clear();
-    await chrome.storage.sync.clear();
-    await chrome.storage.sync.set({ url: t });
-    await new Promise(r => setTimeout(r, 800)); // let background mirror settle
-    await chrome.storage.local.remove('url');
-    if (extraLocal) await chrome.storage.local.set(extraLocal);
-  }, { t: TARGET, extraLocal });
+  await quiesce({ url: TARGET });
+  if (extraLocal) await page.evaluate(async (extraLocal) => { await chrome.storage.local.set(extraLocal); }, extraLocal);
   const pre = await readStorage(page);
   if (pre.local.url !== undefined) throw new Error('precondition failed: local.url still present');
   if (pre.sync.url !== TARGET) throw new Error('precondition failed: sync.url missing');
 }
 
+// main.html either redirects to the stored url or, when there is none,
+// bootstraps Angular to render the apps page (redirect.js resumes the
+// bootstrap only on that path). Wait for whichever happens; a redirect that
+// never comes is caught by the apps page rendering, not by a timeout.
 async function openNewTab(context, extId) {
   const page = await context.newPage();
+  const outcome = new Promise((resolve) => {
+    let failures = 0;
+    const failed = () => { if (++failures === 2) resolve(null); };
+    page.waitForURL(TARGET, { waitUntil: 'commit', timeout: HANG_MS }).then(() => resolve('redirected'), failed);
+    page.waitForFunction(() => location.protocol === 'chrome-extension:' &&
+      document.readyState !== 'loading' && !document.querySelector('[ng-cloak]'),
+    null, { polling: 100, timeout: HANG_MS }).then(() => resolve('apps page'), failed);
+  });
   await page.goto(`chrome-extension://${extId}/main.html`).catch(() => {});
-  try {
-    await page.waitForURL(TARGET, { timeout: 4000 });
-  } catch { /* stayed on main.html (apps page) */ }
+  if (!(await outcome)) hung(`main.html to redirect to ${TARGET} or render the apps page`);
   const finalUrl = page.url();
   await page.close();
   return finalUrl;
+}
+
+async function localState(page) {
+  return page.evaluate(() => chrome.storage.local.get(null));
 }
 
 const { context, extId } = await launch();
@@ -94,6 +228,7 @@ const ops = await storagePage(context, extId);
 await breakState(ops); // local.url absent, sync.url present, no pending event
 let url = await openNewTab(context, extId);
 record('S1 redirect falls back to sync.url', url === TARGET, `landed on ${url}`);
+await waitFor('the redirect to heal local.url', async () => (await localState(ops)).url === TARGET);
 let store = await readStorage(ops);
 record('S1 self-heals storage.local.url', store.local.url === TARGET,
   `local.url=${JSON.stringify(store.local.url)}`);
@@ -101,13 +236,11 @@ record('S1 self-heals storage.local.url', store.local.url === TARGET,
 // --- Scenario 2: same-value Save repairs storage.local
 await breakState(ops, { syncOptions: true, syncProvider: 'browser' });
 await ops.reload();
-await ops.waitForFunction(
-  t => document.querySelector('input[name="url"]')?.value === t, TARGET, { timeout: 5000 }
-).catch(() => {});
+await optionsReady(ops, TARGET);
 const fieldVal = await ops.inputValue('input[name="url"]');
 record('S2 options shows synced URL', fieldVal === TARGET, `field=${fieldVal}`);
 await ops.click('button[title="Save"]'); // no edit: same-value save
-await ops.waitForTimeout(1000);
+await waitFor('the Save to write local.url', async () => (await localState(ops)).url === TARGET);
 store = await readStorage(ops);
 record('S2 same-value Save writes storage.local.url', store.local.url === TARGET,
   `local.url=${JSON.stringify(store.local.url)}`);
@@ -118,19 +251,51 @@ url = await openNewTab(context, extId);
 record('S3 normal local-mode redirect works', url === TARGET, `landed on ${url}`);
 
 // --- Scenario 4: the background mirror respects the sync opt-in
-await setState(ops, { local: { url: 'https://a.example/', syncOptions: false } });
-await ops.evaluate(async () => { await chrome.storage.sync.set({ url: 'https://b.example/' }); });
-await ops.waitForTimeout(1200);
-store = await readStorage(ops);
-record('S4a sync OFF: incoming sync change does not clobber local',
-  store.local.url === 'https://a.example/', `local.url=${JSON.stringify(store.local.url)}`);
-
+// S4b runs first: it measures how long the mirror takes to copy a sync change
+// into local, and S4a's absence window is sized from it.
 await setState(ops, { local: { url: 'https://a.example/', syncOptions: true } });
-await ops.evaluate(async () => { await chrome.storage.sync.set({ url: 'https://b.example/' }); });
-await ops.waitForTimeout(1200);
+// Writing local.url arms the engine's debounced push, which writes 'a' to
+// sync. Let it land first, or it could arrive after 'b' and win.
+await waitFor('the debounced browser push of url a',
+  async () => (await readStorage(ops)).sync.syncDoc?.settings?.url === 'https://a.example/');
+const mirrorMs = await ops.evaluate(async (hangMs) => {
+  const t0 = performance.now();
+  const mirrored = new Promise((resolve) => {
+    const guard = setTimeout(() => {
+      chrome.storage.onChanged.removeListener(listener);
+      resolve(null);
+    }, hangMs);
+    function listener(changes, ns) {
+      if (ns === 'local' && changes.url && changes.url.newValue === 'https://b.example/') {
+        clearTimeout(guard);
+        chrome.storage.onChanged.removeListener(listener);
+        resolve(performance.now() - t0);
+      }
+    }
+    chrome.storage.onChanged.addListener(listener);
+  });
+  await chrome.storage.sync.set({ url: 'https://b.example/' });
+  return mirrored;
+}, HANG_MS);
+if (mirrorMs === null) hung('the background mirror to copy sync.url b into local');
 store = await readStorage(ops);
 record('S4b sync ON: incoming sync change mirrors to local',
-  store.local.url === 'https://b.example/', `local.url=${JSON.stringify(store.local.url)}`);
+  store.local.url === 'https://b.example/',
+  `local.url=${JSON.stringify(store.local.url)} mirror=${mirrorMs === null ? 'none' : mirrorMs.toFixed(0) + ' ms'}`);
+
+// S4a is an absence check: with sync off the mirror must do nothing, and doing
+// nothing writes nothing, so no event or storage value marks "the mirror has
+// decided". Wait a window instead, ten times what the mirror took to act in
+// S4b and at least 1.2 s. A slower box widens the window with it; a slow
+// mirror can only make this pass when it should fail, never fail correct code.
+const s4aWindowMs = Math.round(Math.max(1200, 10 * (mirrorMs ?? 0)));
+await setState(ops, { local: { url: 'https://a.example/', syncOptions: false } });
+await ops.evaluate(async () => { await chrome.storage.sync.set({ url: 'https://b.example/' }); });
+await new Promise((r) => setTimeout(r, s4aWindowMs));
+store = await readStorage(ops);
+record('S4a sync OFF: incoming sync change does not clobber local',
+  store.local.url === 'https://a.example/',
+  `local.url=${JSON.stringify(store.local.url)} window=${s4aWindowMs} ms`);
 
 // --- Scenario 5: legacy string flags normalize; sync is strictly opt-in
 // (4.1: the checkbox became a provider picker; assertions target the radios)
@@ -142,7 +307,7 @@ async function selectedProvider() {
 }
 await setState(ops, { local: { url: TARGET, syncOptions: 'true' } });
 await ops.reload();
-await ops.waitForTimeout(800);
+await optionsReady(ops, TARGET);
 store = await readStorage(ops);
 record('S5a legacy "true" flag normalizes and maps to browser provider',
   store.local.syncOptions === true && (await selectedProvider()) === 'browser',
@@ -150,7 +315,7 @@ record('S5a legacy "true" flag normalizes and maps to browser provider',
 
 await setState(ops, { local: { url: TARGET, syncOptions: 'false' } });
 await ops.reload();
-await ops.waitForTimeout(800);
+await optionsReady(ops, TARGET);
 store = await readStorage(ops);
 record('S5b legacy "false" flag normalizes and reads as sync off',
   store.local.syncOptions === false && (await selectedProvider()) === 'off',
@@ -158,7 +323,7 @@ record('S5b legacy "false" flag normalizes and reads as sync off',
 
 await setState(ops, { local: { url: TARGET } });
 await ops.reload();
-await ops.waitForTimeout(800);
+await optionsReady(ops, TARGET);
 record('S5c missing flag defaults to sync off',
   (await selectedProvider()) === 'off', `picker=${await selectedProvider()}`);
 
@@ -170,15 +335,23 @@ async function bgLuminance(page) {
   });
 }
 
+// theme.js paints from its localStorage copy first, then applies the value
+// from chrome.storage.local when its read returns. A read made by the test
+// from the same page is answered after that one, and its callback runs after
+// theme.js's, so once it returns the page shows the stored theme.
+async function themeSettled(page) {
+  await page.evaluate(() => chrome.storage.local.get(null));
+}
+
 await setState(ops, { local: { url: TARGET, syncOptions: false } });
 let themePage = await context.newPage();
 await themePage.emulateMedia({ colorScheme: 'dark' });
 await themePage.goto(`chrome-extension://${extId}/options.html`);
-await themePage.waitForTimeout(400);
+await themeSettled(themePage);
 record('S6a system mode follows OS dark', (await bgLuminance(themePage)) < 0.3,
   `lum=${(await bgLuminance(themePage)).toFixed(2)}`);
 await themePage.emulateMedia({ colorScheme: 'light' });
-await themePage.waitForTimeout(200);
+await waitFor('the page to turn light after the OS switch', async () => (await bgLuminance(themePage)) > 0.7);
 record('S6a system mode follows OS light', (await bgLuminance(themePage)) > 0.7,
   `lum=${(await bgLuminance(themePage)).toFixed(2)}`);
 await themePage.close();
@@ -189,11 +362,11 @@ themePage = await context.newPage();
 await themePage.emulateMedia({ colorScheme: 'light' });
 await themePage.goto(`chrome-extension://${extId}/options.html`);
 await themePage.click('input[ng-model="theme"][value="dark"]').catch(() => {});
-await themePage.waitForTimeout(400);
+await waitFor('the page to turn dark after choosing Dark', async () => (await bgLuminance(themePage)) < 0.3);
 record('S6b explicit dark beats OS light', (await bgLuminance(themePage)) < 0.3,
   `lum=${(await bgLuminance(themePage)).toFixed(2)}`);
 await themePage.reload();
-await themePage.waitForTimeout(400);
+await themeSettled(themePage);
 record('S6b explicit dark persists across reload', (await bgLuminance(themePage)) < 0.3,
   `lum=${(await bgLuminance(themePage)).toFixed(2)}`);
 await themePage.close();
@@ -205,7 +378,7 @@ for (const path of ['main.html', 'welcome.html']) {
   themePage = await context.newPage();
   await themePage.emulateMedia({ colorScheme: 'dark' });
   await themePage.goto(`chrome-extension://${extId}/${path}`).catch(() => {});
-  await themePage.waitForTimeout(400);
+  await themeSettled(themePage);
   record(`S6c dark tokens on ${path}`, (await bgLuminance(themePage)) < 0.3,
     `lum=${(await bgLuminance(themePage)).toFixed(2)}`);
   await themePage.close();
@@ -216,7 +389,8 @@ await setState(ops, { local: { url: TARGET, syncOptions: true } });
 await ops.evaluate(async () => {
   await chrome.runtime.sendMessage({ type: 'tabsetgo-sync-now' }).catch(() => {});
 });
-await ops.waitForTimeout(600);
+await waitFor('the engine to migrate syncOptions to a provider',
+  async () => (await localState(ops)).syncProvider === 'browser');
 store = await readStorage(ops);
 record('S7a legacy syncOptions migrates to browser provider',
   store.local.syncProvider === 'browser',
@@ -228,7 +402,15 @@ await setState(ops, {
     __testFakeProvider: true, syncProvider: 'fake', syncOptions: false,
   },
 });
-await ops.waitForTimeout(2600); // let seed-write stamp bumps + debounce push settle
+// The seed write stamps url and theme and arms the debounced push; wait until
+// that push has sent the stamped doc, so it cannot land on the remote below.
+await waitFor('the debounced push of the seeded settings to the fake provider', async () => {
+  const local = await localState(ops);
+  const remote = local.__fakeRemote;
+  const stamps = local.syncStamps || {};
+  return !!local.syncLastPush && !!remote &&
+    remote.stamps.url === (stamps.url || 0) && remote.stamps.theme === (stamps.theme || 0);
+});
 await ops.evaluate(async () => {
   await chrome.storage.local.set({
     syncStamps: { url: 1000, theme: 5000 },
@@ -240,7 +422,9 @@ await ops.evaluate(async () => {
   });
   await chrome.runtime.sendMessage({ type: 'tabsetgo-sync-now' }).catch(() => {});
 });
-await ops.waitForTimeout(800);
+// The merge writes both keys in one set, so once url shows b the theme
+// decision has been made too.
+await waitFor('the pull to apply the newer remote url', async () => (await localState(ops)).url === 'https://b.example/');
 store = await readStorage(ops);
 record('S7b LWW: newer remote key applies locally',
   store.local.url === 'https://b.example/', `url=${JSON.stringify(store.local.url)}`);
@@ -250,7 +434,8 @@ record('S7b LWW: newer local key survives remote',
 await ops.evaluate(async () => {
   await chrome.storage.local.set({ url: 'https://c.example/' });
 });
-await ops.waitForTimeout(3800); // stamp bump + 2s debounce + slack
+await waitFor('the debounced push of url c',
+  async () => (await localState(ops)).__fakeRemote?.settings?.url === 'https://c.example/');
 store = await readStorage(ops);
 record('S7c local change pushes to provider (debounced)',
   !!store.local.__fakeRemote && store.local.__fakeRemote.settings.url === 'https://c.example/',
@@ -258,7 +443,7 @@ record('S7c local change pushes to provider (debounced)',
 
 // --- Scenario 7d/7e: import wins everywhere; export produces the doc
 await ops.reload();
-await ops.waitForTimeout(600);
+await optionsReady(ops, 'https://c.example/');
 await ops.setInputFiles('#import-file', {
   name: 'tabsetgo-settings.json',
   mimeType: 'application/json',
@@ -268,13 +453,20 @@ await ops.setInputFiles('#import-file', {
     stamps: { url: 1, theme: 1 },
   })),
 });
-await ops.waitForTimeout(800);
+await waitFor('the import to write url d and theme light', async () => {
+  const local = await localState(ops);
+  return local.url === 'https://d.example/' && local.theme === 'light';
+});
 store = await readStorage(ops);
 record('S7d import wins despite older stamps in the file',
   store.local.url === 'https://d.example/' && store.local.theme === 'light',
   `url=${JSON.stringify(store.local.url)} theme=${JSON.stringify(store.local.theme)}`);
+// The import arms the debounced push; let it land before Scenario 8.
+await waitFor('the debounced push of the imported settings',
+  async () => (await localState(ops)).__fakeRemote?.settings?.url === 'https://d.example/');
 
-const downloadPromise = ops.waitForEvent('download', { timeout: 5000 }).catch(() => null);
+const downloadPromise = ops.waitForEvent('download', { timeout: HANG_MS })
+  .catch(() => { hung('the settings download'); return null; });
 await ops.click('button[title="Download settings"]').catch(() => {});
 const download = await downloadPromise;
 let exported = null;
@@ -291,6 +483,7 @@ record('S7e export downloads the sync document',
 // --- Scenario 8: WebDAV provider, real roundtrip against a local server
 const { createServer } = await import('node:http');
 const davStore = new Map();
+const davRequests = []; // methods, in the order the server handled them
 const dav = createServer((req, res) => {
   const chunks = [];
   req.on('data', (c) => chunks.push(c));
@@ -304,10 +497,16 @@ const dav = createServer((req, res) => {
       if (!body) { res.statusCode = 404; res.end(); }
       else { res.statusCode = 200; res.end(body); }
     } else { res.statusCode = 405; res.end(); }
+    davRequests.push(req.method);
   });
 });
 await new Promise((r) => dav.listen(0, '127.0.0.1', r));
 const davBase = `http://127.0.0.1:${dav.address().port}/sync`;
+
+function davUrl() {
+  try { return JSON.parse(davStore.get('/sync/tabsetgo-settings.json').toString('utf8')).settings.url; }
+  catch { return null; }
+}
 
 await setState(ops, {
   local: {
@@ -316,17 +515,19 @@ await setState(ops, {
     webdavConfig: { baseUrl: davBase, username: 'u', appPassword: 'p' },
   },
 });
-await ops.waitForTimeout(400);
 await ops.evaluate(async () => {
   await chrome.runtime.sendMessage({ type: 'tabsetgo-sync-now' }).catch(() => {});
 });
-await ops.waitForTimeout(600);
-const seeded = davStore.get('/sync/tabsetgo-settings.json');
-let seededUrl = null;
-try { seededUrl = JSON.parse(seeded.toString('utf8')).settings.url; } catch { /* none */ }
+await waitFor('the WebDAV remote file to hold url e', () => davUrl() === 'https://e.example/');
+const seededUrl = davUrl();
 record('S8a WebDAV seeds the remote file on first sync',
   seededUrl === 'https://e.example/', `remote.url=${JSON.stringify(seededUrl)}`);
 
+// The seed write above also armed the debounced push, which PUTs 'e' and would
+// overwrite the newer file below. It has landed once two PUTs are in, or once
+// one is in and came first (the push beat the sync's GET, so no seed PUT).
+await waitFor('the debounced WebDAV push of url e', () =>
+  davRequests.filter((m) => m === 'PUT').length >= 2 || davRequests[0] === 'PUT');
 davStore.set('/sync/tabsetgo-settings.json', Buffer.from(JSON.stringify({
   version: 1, updatedAt: 9999999999999,
   settings: { url: 'https://f.example/' },
@@ -335,7 +536,7 @@ davStore.set('/sync/tabsetgo-settings.json', Buffer.from(JSON.stringify({
 await ops.evaluate(async () => {
   await chrome.runtime.sendMessage({ type: 'tabsetgo-sync-now' }).catch(() => {});
 });
-await ops.waitForTimeout(600);
+await waitFor('the WebDAV pull to apply url f', async () => (await localState(ops)).url === 'https://f.example/');
 store = await readStorage(ops);
 record('S8b WebDAV pull applies newer remote settings',
   store.local.url === 'https://f.example/', `url=${JSON.stringify(store.local.url)}`);
@@ -344,7 +545,9 @@ dav.close();
 // --- Scenario 9: OAuth providers gate cleanly + PKCE vector
 await setState(ops, { local: { url: TARGET } });
 await ops.reload();
-await ops.waitForTimeout(800);
+// optionsReady also waits for the providers' availability answer, so the
+// disabled state below is the engine's verdict, not the page's initial one.
+await optionsReady(ops, TARGET);
 const pickerDisabled = await ops.evaluate(() => {
   const out = {};
   for (const id of ['dropbox', 'onedrive', 'gdrive']) {
@@ -357,8 +560,7 @@ record('S9a unconfigured OAuth providers are disabled in the picker',
   pickerDisabled.dropbox === true && pickerDisabled.onedrive === true && pickerDisabled.gdrive === true,
   JSON.stringify(pickerDisabled));
 
-const [swWorker] = context.serviceWorkers();
-const pkce = await swWorker.evaluate(async () => {
+const pkce = await worker().evaluate(async () => {
   return self.TabSetGoSync.oauth.challengeFor('test');
 });
 record('S9b PKCE S256 challenge matches known vector',
