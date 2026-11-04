@@ -31,22 +31,36 @@ function record(name, pass, detail) {
   console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}${detail ? '  -- ' + detail : ''}`);
 }
 
+// A tripped hang guard is a failure of its own: it is recorded like a failed
+// assertion, so the run exits non-zero even where no assertion follows it.
 function hung(what) {
-  console.log(`HUNG ${HANG_MS / 1000} s waiting for ${what}`);
+  const name = `HUNG ${HANG_MS / 1000} s waiting for ${what}`;
+  results.push({ name, pass: false });
+  console.log(name);
 }
 
+// A navigation cut short is fine to ignore; a timeout never is.
+function unlessTimeout(e) {
+  if (e && e.name === 'TimeoutError') throw e;
+}
+
+const EXPIRED = Symbol('expired');
+
 // Poll `probe` until it returns something truthy, and return that. A probe
-// that throws (a page mid-reload) counts as not yet. After HANG_MS it prints
-// HUNG and returns the falsy value, so the step's own assertion records FAIL.
+// that throws (a page mid-reload) counts as not yet; one that never settles is
+// cut off at the deadline. After HANG_MS it records HUNG (a FAIL, named after
+// what it waited on) and returns undefined.
 async function waitFor(what, probe) {
   const deadline = Date.now() + HANG_MS;
   for (;;) {
     let value;
-    try { value = await probe(); } catch { value = undefined; }
-    if (value) return value;
-    if (Date.now() >= deadline) {
+    let guard;
+    const expired = new Promise((r) => { guard = setTimeout(() => r(EXPIRED), Math.max(0, deadline - Date.now())); });
+    try { value = await Promise.race([probe(), expired]); } catch { value = undefined; } finally { clearTimeout(guard); }
+    if (value && value !== EXPIRED) return value;
+    if (value === EXPIRED || Date.now() >= deadline) {
       hung(what);
-      return value;
+      return undefined;
     }
     await new Promise((r) => setTimeout(r, 100));
   }
@@ -72,6 +86,10 @@ async function launch() {
   // state. usingStorageApi is written by that setup and by nothing else.
   await waitFor('the install-time initial settings (local.usingStorageApi)', () =>
     sw.evaluate(() => chrome.storage.local.get('usingStorageApi').then((i) => i.usingStorageApi === true)));
+  // The engine's periodic pull (an alarm it creates at worker start, first
+  // firing 15 min later) would sync at a moment of its own choosing in a slow
+  // run. No scenario tests it, so take it out of the run.
+  await sw.evaluate(() => chrome.alarms.clear('tabsetgo-sync'));
   return { context, extId };
 }
 
@@ -137,8 +155,23 @@ function worker() {
 // value step 3 waits for. It runs in the service worker, so it can wait on the
 // engine's own listener (registered first, so it runs first) and on the
 // worker's storage calls, which are answered in the order they are made.
+//
+// Before step 1, syncOptions is set false and settled: a background mirror
+// chain already in flight (get the flag, get it again, set) finishes inside
+// that settle, and any mirror chain that starts after it reads the flag off.
+// Otherwise a late chain could copy syncOptions true into the emptied local,
+// and the migration in step 3 would then write 'browser', not 'off'. The flag
+// is not a synced key and the mirror ignores local changes, so writing it arms
+// nothing.
 async function quiesce(sync) {
-  const stuck = await worker().evaluate(async ({ sync, hangMs }) => {
+  await drainEngine({ sync, empty: true });
+}
+
+// drainEngine({ empty: false }) runs only steps 2 and 3, on the state as it
+// is: for a state with syncProvider 'off' and no always-tab-update, which it
+// leaves as it found them (plus the engine's syncStamps).
+async function drainEngine({ sync = null, empty }) {
+  const stuck = await worker().evaluate(async ({ sync, empty, hangMs }) => {
     const local = chrome.storage.local;
     // Two chained round trips: the first is answered after every storage call
     // this worker made before it; the second, after the calls those answers
@@ -158,10 +191,14 @@ async function quiesce(sync) {
       chrome.storage.onChanged.addListener(listener);
     });
 
-    await local.clear();
-    await chrome.storage.sync.clear();
-    // syncOptions is unset, so the background mirror leaves local alone.
-    if (sync) await chrome.storage.sync.set(sync);
+    if (empty) {
+      await local.set({ syncOptions: false });
+      await settle();
+      await local.clear();
+      await chrome.storage.sync.clear();
+      // syncOptions is unset, so the background mirror leaves local alone.
+      if (sync) await chrome.storage.sync.set(sync);
+    }
     await local.set({ 'always-tab-update': 'quiesce', syncProvider: 'off' });
     const armed = nextLocalChange('the sync engine to stamp a synced-key change',
       (c) => c['always-tab-update'] && c['always-tab-update'].oldValue === 'quiesce');
@@ -173,9 +210,9 @@ async function quiesce(sync) {
       await local.remove('syncProvider');
       stuck = await pushed;
     }
-    await local.clear();
+    if (empty) await local.clear();
     return stuck;
-  }, { sync: sync || null, hangMs: HANG_MS });
+  }, { sync: sync || null, empty, hangMs: HANG_MS });
   if (stuck) hung(stuck);
 }
 
@@ -212,7 +249,8 @@ async function openNewTab(context, extId) {
       document.readyState !== 'loading' && !document.querySelector('[ng-cloak]'),
     null, { polling: 100, timeout: HANG_MS }).then(() => resolve('apps page'), failed);
   });
-  await page.goto(`chrome-extension://${extId}/main.html`).catch(() => {});
+  // The redirect cuts this navigation short, which goto reports as an error.
+  await page.goto(`chrome-extension://${extId}/main.html`).catch(unlessTimeout);
   if (!(await outcome)) hung(`main.html to redirect to ${TARGET} or render the apps page`);
   const finalUrl = page.url();
   await page.close();
@@ -365,7 +403,7 @@ await setState(ops, { local: { url: TARGET, syncOptions: false } });
 themePage = await context.newPage();
 await themePage.emulateMedia({ colorScheme: 'light' });
 await themePage.goto(`chrome-extension://${extId}/options.html`);
-await themePage.click('input[ng-model="theme"][value="dark"]').catch(() => {});
+await themePage.click('input[ng-model="theme"][value="dark"]');
 await waitFor('the page to turn dark after choosing Dark', async () => (await bgLuminance(themePage)) < 0.3);
 record('S6b explicit dark beats OS light', (await bgLuminance(themePage)) < 0.3,
   `lum=${(await bgLuminance(themePage)).toFixed(2)}`);
@@ -381,7 +419,7 @@ await setState(ops, { local: { url: '', syncOptions: false } }); // empty url ->
 for (const path of ['main.html', 'welcome.html']) {
   themePage = await context.newPage();
   await themePage.emulateMedia({ colorScheme: 'dark' });
-  await themePage.goto(`chrome-extension://${extId}/${path}`).catch(() => {});
+  await themePage.goto(`chrome-extension://${extId}/${path}`).catch(unlessTimeout);
   await themeSettled(themePage);
   record(`S6c dark tokens on ${path}`, (await bgLuminance(themePage)) < 0.3,
     `lum=${(await bgLuminance(themePage)).toFixed(2)}`);
@@ -519,26 +557,29 @@ function davUrl() {
   catch { return null; }
 }
 
+// Write the settings with the provider off, and drain the debounced push that
+// the url write arms (with no provider it sends nothing). Turning WebDAV on
+// writes no synced key, so the only request that can then PUT the file is the
+// first sync's seed: its pull finds no file (404) and pushes local in its
+// place, and the message is answered after that PUT.
 await setState(ops, {
   local: {
     url: 'https://e.example/',
-    syncProvider: 'webdav',
+    syncProvider: 'off',
     webdavConfig: { baseUrl: davBase, username: 'u', appPassword: 'p' },
   },
 });
+await drainEngine({ empty: false });
 await ops.evaluate(async () => {
-  await chrome.runtime.sendMessage({ type: 'tabsetgo-sync-now' }).catch(() => {});
+  await chrome.runtime.sendMessage({ type: 'tabsetgo-sync-set-provider', id: 'webdav' }).catch(() => {});
 });
-await waitFor('the WebDAV remote file to hold url e', () => davUrl() === 'https://e.example/');
 const seededUrl = davUrl();
 record('S8a WebDAV seeds the remote file on first sync',
-  seededUrl === 'https://e.example/', `remote.url=${JSON.stringify(seededUrl)}`);
+  seededUrl === 'https://e.example/' && davRequests.join() === 'GET,PUT',
+  `remote.url=${JSON.stringify(seededUrl)} requests=${davRequests.join() || 'none'}`);
 
-// The seed write above also armed the debounced push, which PUTs 'e' and would
-// overwrite the newer file below. It has landed once two PUTs are in, or once
-// one is in and came first (the push beat the sync's GET, so no seed PUT).
-await waitFor('the debounced WebDAV push of url e', () =>
-  davRequests.filter((m) => m === 'PUT').length >= 2 || davRequests[0] === 'PUT');
+// No push is armed now (the url write's push was drained above, and the seed
+// is pushed directly), so nothing can overwrite the newer file below.
 davStore.set('/sync/tabsetgo-settings.json', Buffer.from(JSON.stringify({
   version: 1, updatedAt: 9999999999999,
   settings: { url: 'https://f.example/' },
