@@ -114,6 +114,9 @@ function worker() {
   return sw;
 }
 
+// Why it exists: a debounce timer left over from the previous step can straddle
+// setState's clear/set and stamp syncProvider 'off' over the new state.
+//
 // Empties both storage areas and leaves the sync engine idle, writing `sync`
 // (if given) along the way.
 //
@@ -291,6 +294,7 @@ record('S4b sync ON: incoming sync change mirrors to local',
 const s4aWindowMs = Math.round(Math.max(1200, 10 * (mirrorMs ?? 0)));
 await setState(ops, { local: { url: 'https://a.example/', syncOptions: false } });
 await ops.evaluate(async () => { await chrome.storage.sync.set({ url: 'https://b.example/' }); });
+// timing: allow -- absence window, calibrated to 10x the measured S4b mirror latency (1.2 s floor); a slow box can only false-pass it, never fail correct code
 await new Promise((r) => setTimeout(r, s4aWindowMs));
 store = await readStorage(ops);
 record('S4a sync OFF: incoming sync change does not clobber local',
