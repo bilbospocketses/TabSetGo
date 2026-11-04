@@ -30,12 +30,14 @@ Historical release notes prior to this file live in [changes.txt](changes.txt).
 - test: the e2e suite no longer fails for running slow. Every fixed sleep
   waits instead on the storage write, page state or event it stood in for,
   and every bound (including Playwright's 30 s default) is now a 120 s hang
-  guard that prints `HUNG` and names what it waited on. Each scenario first
-  arms the sync engine's 2 s debounced push and waits for it to run, so a push
-  left over from the step before can't overwrite the next step's state; S4a,
-  an absence check, waits ten times the mirror latency S4b measures (at least
-  1.2 s). S7c now waits for the pull's own push to land first, so it passes
-  only when a local url edit is pushed.
+  guard. A guard that trips prints `HUNG`, names what it waited on, and fails
+  the run. Each scenario first arms the sync engine's 2 s debounced push and
+  waits for it to run, so a push left over from the step before can't
+  overwrite the next step's state, and the engine's 15-minute sync alarm is
+  cleared at launch. S4a, an absence check, waits ten times the mirror latency
+  S4b measures (at least 1.2 s). S7c now waits for the pull's own push to land
+  first, so it passes only when a local url edit is pushed, and S8a turns
+  WebDAV on with no push pending, so it passes only on the first sync's seed.
 - ci: the e2e job no longer stops for taking long. Its 15-minute
   `timeout-minutes` is gone; each step that installs, downloads or tests runs
   under a watchdog that stops it only when, for 20 minutes, it has printed no
